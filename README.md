@@ -12,6 +12,8 @@ you can read, edit and back up with `cp`.
 > tracker, not an integrated library system. If you need circulation rules, MARC records,
 > barcodes or patron fines, use [Koha](https://koha-community.org/) instead.
 
+<img width="1671" height="926" alt="Screenshot 2026-07-18 225331" src="https://github.com/user-attachments/assets/3de56e25-dc0b-490c-aaf2-685e629d6227" />
+
 ---
 
 ## Contents
