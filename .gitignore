@@ -1,0 +1,9 @@
+node_modules/
+.env
+logs/
+data/books.json
+data/users.json
+data/.*.tmp
+backups/
+*.log
+.DS_Store

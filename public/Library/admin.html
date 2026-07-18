@@ -1,0 +1,723 @@
+   <!-- Copyright 2026 Alexander L. Penny
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Library Admin — {{LIBRARY_NAME}}</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="icon" href="https://www.freeiconspng.com/uploads/open-book-icon-icon--open-book-2-svg-12.png" type="image/png">
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #f5f4f0; --surface: #ffffff; --surface2: #f0eeea;
+      --border: rgba(0,0,0,0.08); --border-med: rgba(0,0,0,0.14);
+      --text: #1a1917; --text-2: #5a5850; --text-3: #9a9890;
+      --accent: #2d5a3d; --accent-bg: #eaf2ec;
+      --warn-bg: #fef6e4; --warn-text: #7a5500;
+      --danger-bg: #fdecea; --danger-text: #8a1f1a; --danger-border: #f09595;
+      --radius: 10px; --radius-sm: 6px;
+    }
+    body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 2rem 1.5rem 4rem; }
+    .wrap { max-width: 940px; margin: 0 auto; }
+
+    /* header */
+    .admin-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    .admin-title { font-family: 'DM Serif Display', serif; font-size: 30px; line-height: 1.1; }
+    .admin-title span { font-style: italic; color: var(--accent); }
+    .admin-sub { font-size: 12px; color: var(--text-3); margin-top: 4px; letter-spacing: 0.06em; text-transform: uppercase; }
+    .header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+    /* buttons */
+    .btn { font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 8px 16px; border-radius: var(--radius-sm); cursor: pointer; border: 1px solid var(--border-med); background: var(--surface); color: var(--text-2); transition: all 0.12s; white-space: nowrap; }
+    .btn:hover { background: var(--surface2); }
+    .btn:disabled { opacity: 0.5; cursor: default; }
+    .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .btn-primary:hover:not(:disabled) { background: #24492f; }
+    .btn-danger { color: var(--danger-text); border-color: var(--danger-border); background: var(--danger-bg); }
+    .btn-danger:hover { background: #fbdedb; }
+    .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+    /* login */
+    .login-card { max-width: 360px; margin: 8vh auto 0; background: var(--surface); border: 1px solid var(--border-med); border-radius: var(--radius); padding: 2rem; }
+    .login-card h1 { font-family: 'DM Serif Display', serif; font-size: 24px; margin-bottom: 0.35rem; }
+    .login-card h1 span { font-style: italic; color: var(--accent); }
+    .login-card .admin-sub { margin-bottom: 1.5rem; }
+
+    .fr { margin-bottom: 14px; }
+    .fr label { display: block; font-size: 11px; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-3); margin-bottom: 5px; }
+    .fr input, .fr select, .fr textarea {
+      width: 100%; font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--text);
+      background: var(--surface); border: 1px solid var(--border-med); border-radius: var(--radius-sm);
+      padding: 9px 11px; outline: none; transition: border-color 0.15s;
+    }
+    .fr textarea { resize: vertical; min-height: 68px; line-height: 1.5; }
+    .fr input:focus, .fr select:focus, .fr textarea:focus { border-color: var(--accent); }
+    .fr select { cursor: pointer; }
+
+    .msg { font-size: 13px; padding: 9px 12px; border-radius: var(--radius-sm); margin-bottom: 12px; display: none; }
+    .msg.show { display: block; }
+    .msg.err { background: var(--danger-bg); color: var(--danger-text); border: 1px solid var(--danger-border); }
+    .msg.ok { background: var(--accent-bg); color: var(--accent); border: 1px solid #b9d5c1; }
+
+    /* members / approvals */
+    .members-card { background: var(--surface); border: 1px solid var(--border-med); border-radius: var(--radius); padding: 1rem 1.1rem; margin-bottom: 1.25rem; }
+    .members-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 0.5rem; }
+    .members-title { font-family: 'DM Serif Display', serif; font-size: 18px; display: flex; align-items: center; gap: 8px; }
+    .mem-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--warn-text); color: #fff; font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 500; }
+    .member-group-title { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); margin: 12px 0 6px; }
+    .member-row { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; padding: 9px 0; border-top: 1px solid var(--border); }
+    .member-name { font-size: 14px; }
+    .member-email { font-size: 12px; color: var(--text-3); }
+    .member-status { font-size: 11px; padding: 3px 9px; border-radius: 999px; white-space: nowrap; background: var(--surface2); color: var(--text-2); }
+    .member-status.s-pending_approval { background: var(--warn-bg); color: var(--warn-text); }
+    .member-status.s-approved { background: var(--accent-bg); color: var(--accent); }
+    .member-status.s-rejected { background: var(--danger-bg); color: var(--danger-text); }
+    .member-actions { display: flex; gap: 6px; }
+    @media (max-width: 640px) {
+      .member-row { grid-template-columns: 1fr; gap: 6px; }
+      .member-status { justify-self: start; }
+    }
+
+    /* toolbar */
+    .toolbar { display: flex; gap: 8px; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
+    .toolbar input[type=text] { flex: 1; min-width: 180px; font-family: inherit; font-size: 13px; color: var(--text); background: var(--surface); border: 1px solid var(--border-med); border-radius: var(--radius-sm); padding: 9px 12px; outline: none; }
+    .toolbar input[type=text]:focus { border-color: var(--accent); }
+    .spacer { flex: 1; }
+    .count-note { font-size: 12px; color: var(--text-3); }
+
+    /* dirty indicator */
+    .dirty-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--warn-text); margin-right: 6px; vertical-align: middle; }
+    .save-state { font-size: 12px; color: var(--text-3); margin-right: 4px; }
+
+    /* book cards */
+    .book-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.1rem; margin-bottom: 12px; display: grid; grid-template-columns: 52px 1fr auto; gap: 14px; align-items: start; }
+    .thumb-wrap { width: 52px; }
+    .thumb { width: 52px; height: 70px; border-radius: 4px; object-fit: cover; border: 1px solid var(--border-med); background: var(--surface2); display: block; }
+    .thumb-ph { width: 52px; height: 70px; border-radius: 4px; border: 1px solid var(--border-med); background: var(--surface2); display: flex; align-items: center; justify-content: center; color: var(--text-3); font-size: 10px; text-align: center; }
+    .card-fields { display: grid; grid-template-columns: 2fr 2fr; gap: 10px 12px; }
+    .card-fields .full { grid-column: 1 / -1; }
+    .card-fields .fr { margin-bottom: 0; }
+    .row-tools { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+    .idtag { font-size: 10px; color: var(--text-3); text-align: center; letter-spacing: 0.05em; }
+
+    .li-head { font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3); margin: 2px 0 4px; }
+    .li-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 3px 0; width: 100%; }
+    .li-email { color: var(--text-3); font-size: 11px; }
+    .li-pos { color: var(--text-3); }
+    .li-muted { color: var(--text-3); font-style: italic; }
+    .member-holding { display: inline-block; margin-top: 4px; font-size: 11px; padding: 2px 8px; border-radius: 999px; }
+    .hold-loan { background: #fde8d7; color: #8a4b1a; }
+    .hold-res { background: #fef3c7; color: #92400e; }
+    .loan-info { font-size: 12px; color: var(--text-2); background: var(--surface2); border-radius: var(--radius-sm); padding: 8px 10px; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+
+    /* raw json */
+    #rawWrap { display: none; }
+    #rawJson { width: 100%; min-height: 55vh; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 12px; line-height: 1.55; padding: 14px; border: 1px solid var(--border-med); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); outline: none; }
+    #rawJson:focus { border-color: var(--accent); }
+
+    .footer-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border); flex-wrap: wrap; }
+
+    @media (max-width: 640px) {
+      .book-card { grid-template-columns: 1fr; }
+      .thumb-wrap, .row-tools { width: 100%; flex-direction: row; }
+      .card-fields { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- LOGIN VIEW -->
+  <div id="loginView">
+    <div class="login-card">
+      <h1>Library <span>Admin</span></h1>
+      <div class="admin-sub">{{LIBRARY_NAME}}</div>
+      <div id="loginMsg" class="msg err"></div>
+      <div class="fr">
+        <label for="u">Username</label>
+        <input id="u" type="text" autocomplete="username" />
+      </div>
+      <div class="fr">
+        <label for="p">Password</label>
+        <input id="p" type="password" autocomplete="current-password" />
+      </div>
+      <button id="loginBtn" class="btn btn-primary" style="width:100%">Log in</button>
+    </div>
+  </div>
+
+  <!-- ADMIN VIEW -->
+  <div id="adminView" style="display:none">
+    <div class="admin-header">
+      <div>
+        <div class="admin-title">Library <span>Admin</span></div>
+        <div class="admin-sub">Editing catalogue{{LOCATION_DOT}}</div>
+      </div>
+      <div class="header-actions">
+        <span id="saveState" class="save-state"></span>
+        <button id="saveBtn" class="btn btn-primary" disabled>Save changes</button>
+        <a class="btn" href="{{HOME_URL}}">&#8592; Home</a>
+        <a class="btn" href="./" target="_blank" rel="noopener">View site ↗</a>
+        <button id="logoutBtn" class="btn">Log out</button>
+      </div>
+    </div>
+
+    <div id="adminMsg" class="msg"></div>
+
+    <!-- MEMBERS / APPROVALS -->
+    <div class="members-card">
+      <div class="members-head">
+        <div class="members-title">Members <span class="mem-badge" id="memBadge" style="display:none"></span></div>
+        <button id="membersToggle" class="btn btn-sm">Hide members</button>
+      </div>
+      <div id="membersPanel">
+        <div id="membersList"></div>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <button id="addBtn" class="btn btn-primary btn-sm">+ Add book</button>
+      <input id="filter" type="text" placeholder="Filter by title or author…" />
+      <button id="toggleRaw" class="btn btn-sm">Edit raw JSON</button>
+      <div class="spacer"></div>
+      <span id="countNote" class="count-note"></span>
+    </div>
+
+    <!-- FORM MODE -->
+    <div id="formWrap">
+      <div id="cards"></div>
+    </div>
+
+    <!-- RAW JSON MODE -->
+    <div id="rawWrap">
+      <textarea id="rawJson" spellcheck="false"></textarea>
+      <div class="footer-actions">
+        <span class="count-note">Edit the full catalogue as JSON, then apply it back to the form.</span>
+        <button id="applyRaw" class="btn btn-primary btn-sm">Apply JSON to form</button>
+      </div>
+    </div>
+
+    <div class="footer-actions">
+      <span id="countNote2" class="count-note"></span>
+      <button id="saveBtn2" class="btn btn-primary" disabled>Save changes</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const GENRES = ['Fiction','Non-Fiction','Mystery','History','Science','Reference','Theology'];
+  const AVAIL  = ['Available','Reserved','On Loan','Reference Only','Unavailable'];
+
+  const bookIconTxt = 'No cover';
+
+  const state = { books: [], dirty: false, rawMode: false, filter: '' };
+
+  // ---------- view switching ----------
+  function showLogin() { document.getElementById('loginView').style.display = 'block'; document.getElementById('adminView').style.display = 'none'; }
+  function showAdmin() { document.getElementById('loginView').style.display = 'none'; document.getElementById('adminView').style.display = 'block'; }
+
+  function msg(el, text, kind) {
+    el.textContent = text;
+    el.className = 'msg ' + (kind || '') + (text ? ' show' : '');
+  }
+
+  // ---------- auth ----------
+  async function checkAuth() {
+    try {
+      const res = await fetch('api/me', { cache: 'no-store' });
+      const data = await res.json();
+      if (data.authenticated && data.role === 'admin') { showAdmin(); await loadBooks(); await loadUsers(); }
+      else showLogin();
+    } catch { showLogin(); }
+  }
+
+  async function login() {
+    const btn = document.getElementById('loginBtn');
+    const identifier = document.getElementById('u').value.trim();
+    const password = document.getElementById('p').value;
+    btn.disabled = true;
+    try {
+      const res = await fetch('api/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier, password })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.role === 'admin') {
+        document.getElementById('p').value = '';
+        msg(document.getElementById('loginMsg'), '', '');
+        showAdmin();
+        await loadBooks();
+        await loadUsers();
+      } else if (res.ok) {
+        msg(document.getElementById('loginMsg'), 'That account is not an administrator.', 'err');
+      } else {
+        msg(document.getElementById('loginMsg'), data.error || 'Login failed', 'err');
+      }
+    } catch {
+      msg(document.getElementById('loginMsg'), 'Network error. Try again.', 'err');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function logout() {
+    if (state.dirty && !confirm('You have unsaved changes. Log out anyway?')) return;
+    await fetch('api/logout', { method: 'POST' }).catch(() => {});
+    state.dirty = false;
+    showLogin();
+  }
+
+  // ---------- data ----------
+  async function loadBooks() {
+    try {
+      const res = await fetch('api/admin/books', { cache: 'no-store' });
+      if (res.status === 403) { showLogin(); return; }
+      state.books = await res.json();
+      state.dirty = false;
+      renderAll();
+    } catch {
+      msg(document.getElementById('adminMsg'), 'Could not load catalogue.', 'err');
+    }
+  }
+
+  // ---------- members / approvals ----------
+  async function loadUsers() {
+    try {
+      const res = await fetch('api/admin/users', { cache: 'no-store' });
+      if (!res.ok) return;
+      renderUsers(await res.json());
+    } catch {}
+  }
+
+  const STATUS_LABEL = {
+    pending_email: 'Awaiting email verification',
+    pending_approval: 'Awaiting your approval',
+    approved: 'Approved',
+    rejected: 'Rejected',
+  };
+
+  function renderUsers(users) {
+    const pending = users.filter(u => u.status === 'pending_approval');
+    const unverified = users.filter(u => u.status === 'pending_email');
+    const others = users.filter(u => u.status !== 'pending_approval' && u.status !== 'pending_email');
+    const badge = document.getElementById('memBadge');
+    badge.textContent = pending.length ? pending.length : '';
+    badge.style.display = pending.length ? 'inline-flex' : 'none';
+
+    const wrap = document.getElementById('membersList');
+    if (users.length === 0) { wrap.innerHTML = `<div class="count-note" style="padding:1rem">No members yet.</div>`; return; }
+
+    const holdingTag = (u) => {
+      if (!u.holding) return '';
+      const cls = u.holding.kind === 'loan' ? 'hold-loan' : 'hold-res';
+      const word = u.holding.kind === 'loan' ? 'On loan' : 'Reserved';
+      return `<div class="member-holding ${cls}">${word}: ${escHtml(u.holding.title)}</div>`;
+    };
+    const row = (u, actions) => `
+      <div class="member-row">
+        <div>
+          <div class="member-name">${escHtml(u.name)}</div>
+          <div class="member-email">${escHtml(u.email)}</div>
+          ${holdingTag(u)}
+        </div>
+        <div class="member-status s-${u.status}">${STATUS_LABEL[u.status] || u.status}</div>
+        <div class="member-actions">${actions}</div>
+      </div>`;
+
+    let html = '';
+    if (pending.length) {
+      html += `<div class="member-group-title">Needs approval (${pending.length})</div>`;
+      html += pending.map(u => row(u,
+        `<button class="btn btn-sm btn-primary" data-uid="${u.id}" data-decision="approve">Approve</button>
+         <button class="btn btn-sm btn-danger" data-uid="${u.id}" data-decision="reject">Deny</button>`)).join('');
+    }
+    if (unverified.length) {
+      html += `<div class="member-group-title">Awaiting email verification (${unverified.length})</div>`;
+      html += unverified.map(u => row(u,
+        `<button class="btn btn-sm" data-uid="${u.id}" data-act="resend">Resend link</button>
+         <button class="btn btn-sm btn-danger" data-uid="${u.id}" data-decision="reject">Deny</button>`)).join('');
+    }
+    if (others.length) {
+      html += `<div class="member-group-title">All members (${others.length})</div>`;
+      html += others.map(u => {
+        const del = `<button class="btn btn-sm btn-danger" data-uid="${u.id}" data-act="delete" data-name="${escHtml(u.name)}">Delete</button>`;
+        const act = u.status === 'rejected'
+          ? `<button class="btn btn-sm" data-uid="${u.id}" data-decision="approve">Approve</button>${del}`
+          : del;
+        return row(u, act);
+      }).join('');
+    }
+    wrap.innerHTML = html;
+  }
+
+  function escHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  document.getElementById('membersList').addEventListener('click', async e => {
+    const delBtn = e.target.closest('[data-act="delete"]');
+    if (delBtn) {
+      const nm = delBtn.getAttribute('data-name') || 'this member';
+      if (!confirm(`Permanently delete ${nm}?\n\nTheir account is erased completely, and they are removed from any loans and reservation queues. This cannot be undone.`)) return;
+      delBtn.disabled = true;
+      try {
+        const res = await fetch('api/admin/users/delete', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: delBtn.getAttribute('data-uid') })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 403) { showLogin(); return; }
+        if (res.ok) {
+          let note = `Deleted ${data.name}.`;
+          if (data.loansCleared) note += ` ${data.loansCleared} book${data.loansCleared === 1 ? '' : 's'} returned to Available.`;
+          if (data.queuesCleared) note += ` Removed from ${data.queuesCleared} queue${data.queuesCleared === 1 ? '' : 's'}.`;
+          msg(document.getElementById('adminMsg'), note, 'ok');
+          setTimeout(() => msg(document.getElementById('adminMsg'), '', ''), 5000);
+          await loadUsers();
+          await loadBooks();   // catalogue may have changed
+        } else {
+          msg(document.getElementById('adminMsg'), data.error || 'Could not delete.', 'err');
+          delBtn.disabled = false;
+        }
+      } catch { msg(document.getElementById('adminMsg'), 'Network error.', 'err'); delBtn.disabled = false; }
+      return;
+    }
+    const resendBtn = e.target.closest('[data-act="resend"]');
+    if (resendBtn) {
+      resendBtn.disabled = true;
+      const old = resendBtn.textContent;
+      resendBtn.textContent = 'Sending…';
+      try {
+        const res = await fetch('api/admin/users/resend', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: resendBtn.getAttribute('data-uid') })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 403) { showLogin(); return; }
+        if (res.ok && data.sent) {
+          msg(document.getElementById('adminMsg'), 'Verification email sent.', 'ok');
+        } else if (res.ok) {
+          // Email not configured or send failed — show the link so it can be passed on manually.
+          showLinkFallback(data);
+        } else {
+          msg(document.getElementById('adminMsg'), data.error || 'Could not resend.', 'err');
+        }
+      } catch { msg(document.getElementById('adminMsg'), 'Network error.', 'err'); }
+      finally { resendBtn.disabled = false; resendBtn.textContent = old; await loadUsers(); }
+      return;
+    }
+    const btn = e.target.closest('[data-decision]');
+    if (!btn) return;
+    btn.disabled = true;
+    try {
+      const res = await fetch('api/admin/users/decision', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: btn.getAttribute('data-uid'), decision: btn.getAttribute('data-decision') })
+      });
+      if (res.status === 403) { showLogin(); return; }
+      await loadUsers();
+    } catch { btn.disabled = false; }
+  });
+
+  function showLinkFallback(data) {
+    const box = document.getElementById('adminMsg');
+    const why = data.emailConfigured
+      ? ('Email sending failed' + (data.sendError ? ': ' + escHtml(data.sendError) : '') + '.')
+      : 'Email is not configured on the server, so nothing was sent.';
+    box.innerHTML = `${why} You can pass this verification link to the member directly:
+      <div style="margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <input id="vlink" readonly value="${escHtml(data.link || '')}"
+          style="flex:1;min-width:240px;font-family:ui-monospace,monospace;font-size:11px;padding:6px 8px;border:1px solid var(--border-med);border-radius:6px;background:var(--surface)">
+        <button class="btn btn-sm" id="copyLink">Copy</button>
+      </div>`;
+    box.className = 'msg err show';
+    const btn = document.getElementById('copyLink');
+    if (btn) btn.addEventListener('click', () => {
+      const i = document.getElementById('vlink');
+      i.select();
+      navigator.clipboard?.writeText(i.value).then(() => { btn.textContent = 'Copied'; setTimeout(() => btn.textContent = 'Copy', 1500); })
+        .catch(() => { try { document.execCommand('copy'); btn.textContent = 'Copied'; } catch (_) {} });
+    });
+  }
+
+  document.getElementById('membersToggle').addEventListener('click', () => {
+    const p = document.getElementById('membersPanel');
+    const open = p.style.display !== 'none';
+    p.style.display = open ? 'none' : 'block';
+    document.getElementById('membersToggle').textContent = (open ? 'Show' : 'Hide') + ' members';
+    if (!open) loadUsers();
+  });
+
+  function nextId() {
+    return state.books.reduce((m, b) => Math.max(m, parseInt(b.id, 10) || 0), 0) + 1;
+  }
+
+  function setDirty(v) {
+    state.dirty = v;
+    document.getElementById('saveBtn').disabled = !v;
+    document.getElementById('saveBtn2').disabled = !v;
+    document.getElementById('saveState').innerHTML = v ? '<span class="dirty-dot"></span>Unsaved changes' : '';
+  }
+
+  async function save() {
+    // if in raw mode, apply first
+    if (state.rawMode && !applyRaw()) return;
+    const btn = document.getElementById('saveBtn'); const btn2 = document.getElementById('saveBtn2');
+    btn.disabled = true; btn2.disabled = true;
+    try {
+      const res = await fetch('api/books', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(state.books)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) { showLogin(); return; }
+      if (res.ok) {
+        setDirty(false);
+        msg(document.getElementById('adminMsg'), 'Saved. ' + data.count + ' books written to the catalogue.', 'ok');
+        setTimeout(() => msg(document.getElementById('adminMsg'), '', ''), 3500);
+      } else {
+        msg(document.getElementById('adminMsg'), data.error || 'Save failed.', 'err');
+        setDirty(true);
+      }
+    } catch {
+      msg(document.getElementById('adminMsg'), 'Network error while saving.', 'err');
+      setDirty(true);
+    }
+  }
+
+  // ---------- rendering (form mode) ----------
+  function optionList(values, selected) {
+    return values.map(v => `<option${v === selected ? ' selected' : ''}>${escapeHtml(v)}</option>`).join('');
+  }
+  function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  function loanInfo(b) {
+    const rs = Array.isArray(b.reservations) ? b.reservations : [];
+    const parts = [];
+
+    if (b.borrowedBy && b.borrowedBy.name) {
+      parts.push(`<div class="li-line"><strong>On loan to ${escapeHtml(b.borrowedBy.name)}</strong>
+        <span class="li-email">${escapeHtml(b.borrowedBy.email || '')}</span>
+        <button class="btn btn-sm" data-act="return">Mark returned</button></div>`);
+    }
+
+    if (rs.length) {
+      const rows = rs.map((r, i) => `
+        <div class="li-line">
+          <span class="li-pos">${i + 1}.</span>
+          ${escapeHtml(r.name || '')} <span class="li-email">${escapeHtml(r.email || '')}</span>
+          <button class="btn btn-sm btn-primary" data-act="give" data-email="${escapeHtml(r.email || '')}"
+            title="Mark this book as handed over">I have given book to ${escapeHtml((r.name || '').split(' ')[0])}</button>
+        </div>`).join('');
+      parts.push(`<div class="li-head">Website reservations (${rs.length})</div>${rows}`);
+    }
+
+    if ((b.queue || 0) > 0) {
+      parts.push(`<div class="li-line li-muted">Plus ${b.queue} offline ${b.queue === 1 ? 'person' : 'people'} waiting (your manual count)</div>`);
+    }
+
+    if (!parts.length) return '';
+    return `<div class="full loan-info">${parts.join('')}</div>`;
+  }
+
+  function renderCards() {
+    const wrap = document.getElementById('cards');
+    const f = state.filter.toLowerCase();
+    const items = state.books
+      .map((b, idx) => ({ b, idx }))
+      .filter(({ b }) => !f || (b.title || '').toLowerCase().includes(f) || (b.author || '').toLowerCase().includes(f));
+
+    if (items.length === 0) {
+      wrap.innerHTML = `<div class="count-note" style="padding:2rem;text-align:center">No books match.</div>`;
+      return;
+    }
+
+    wrap.innerHTML = items.map(({ b, idx }) => `
+      <div class="book-card" data-idx="${idx}">
+        <div class="thumb-wrap">
+          ${b.img
+            ? `<img class="thumb" src="${escapeHtml(b.img)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="thumb-ph" style="display:none">${bookIconTxt}</div>`
+            : `<div class="thumb-ph">${bookIconTxt}</div>`}
+          <div class="idtag">#${escapeHtml(b.id)}</div>
+        </div>
+        <div class="card-fields">
+          <div class="fr full"><label>Title</label><input data-field="title" type="text" value="${escapeHtml(b.title)}"></div>
+          <div class="fr"><label>Author</label><input data-field="author" type="text" value="${escapeHtml(b.author)}"></div>
+          <div class="fr"><label>Year</label><input data-field="year" type="text" value="${escapeHtml(b.year)}"></div>
+          <div class="fr"><label>Genre</label><select data-field="genre">${optionList(GENRES, b.genre)}</select></div>
+          <div class="fr"><label>Status</label><select data-field="avail">${optionList(AVAIL, b.avail)}</select></div>
+          <div class="fr"><label>Offline waiting list (manual count)</label><input data-field="queue" type="number" min="0" value="${escapeHtml(b.queue)}"></div>
+          <div class="fr"><label>Cover image URL</label><input data-field="img" type="text" value="${escapeHtml(b.img)}"></div>
+          <div class="fr full"><label>Blurb / description</label><textarea data-field="blurb">${escapeHtml(b.blurb)}</textarea></div>
+          ${loanInfo(b)}
+        </div>
+        <div class="row-tools">
+          <button class="btn btn-sm" data-act="up" title="Move up">↑</button>
+          <button class="btn btn-sm" data-act="down" title="Move down">↓</button>
+          <button class="btn btn-sm btn-danger" data-act="del">Delete</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function updateCounts() {
+    const n = state.books.length;
+    document.getElementById('countNote').textContent = `${n} book${n === 1 ? '' : 's'}`;
+    document.getElementById('countNote2').textContent = `${n} book${n === 1 ? '' : 's'} total`;
+  }
+
+  function renderAll() {
+    renderCards();
+    updateCounts();
+    setDirty(state.dirty);
+    if (state.rawMode) document.getElementById('rawJson').value = JSON.stringify(state.books, null, 2);
+  }
+
+  // ---------- raw json mode ----------
+  function toggleRaw() {
+    state.rawMode = !state.rawMode;
+    document.getElementById('formWrap').style.display = state.rawMode ? 'none' : 'block';
+    document.getElementById('rawWrap').style.display = state.rawMode ? 'block' : 'none';
+    document.getElementById('toggleRaw').textContent = state.rawMode ? 'Back to form' : 'Edit raw JSON';
+    document.getElementById('addBtn').style.display = state.rawMode ? 'none' : '';
+    document.getElementById('filter').style.display = state.rawMode ? 'none' : '';
+    if (state.rawMode) document.getElementById('rawJson').value = JSON.stringify(state.books, null, 2);
+    else renderAll();
+  }
+
+  function applyRaw() {
+    try {
+      const parsed = JSON.parse(document.getElementById('rawJson').value);
+      if (!Array.isArray(parsed)) throw new Error('Top level must be an array.');
+      state.books = parsed;
+      setDirty(true);
+      msg(document.getElementById('adminMsg'), 'JSON applied to form. Remember to Save.', 'ok');
+      setTimeout(() => msg(document.getElementById('adminMsg'), '', ''), 3000);
+      return true;
+    } catch (e) {
+      msg(document.getElementById('adminMsg'), 'Invalid JSON: ' + e.message, 'err');
+      return false;
+    }
+  }
+
+  // ---------- event wiring ----------
+  document.getElementById('loginBtn').addEventListener('click', login);
+  document.getElementById('p').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+  document.getElementById('u').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+  document.getElementById('logoutBtn').addEventListener('click', logout);
+  document.getElementById('saveBtn').addEventListener('click', save);
+  document.getElementById('saveBtn2').addEventListener('click', save);
+  document.getElementById('toggleRaw').addEventListener('click', toggleRaw);
+  document.getElementById('applyRaw').addEventListener('click', applyRaw);
+
+  document.getElementById('addBtn').addEventListener('click', () => {
+    state.books.unshift({ id: nextId(), title: '', author: '', genre: 'Non-Fiction', year: '', avail: 'Available', queue: 0, img: '', blurb: '' });
+    state.filter = ''; document.getElementById('filter').value = '';
+    setDirty(true); renderAll();
+    // focus the new card's title
+    const first = document.querySelector('.book-card input[data-field="title"]');
+    if (first) first.focus();
+  });
+
+  document.getElementById('filter').addEventListener('input', e => { state.filter = e.target.value; renderCards(); });
+
+  // delegate field edits + row tools on the cards container
+  const cards = document.getElementById('cards');
+  cards.addEventListener('input', e => {
+    const field = e.target.getAttribute('data-field');
+    if (!field) return;
+    const card = e.target.closest('.book-card');
+    const idx = parseInt(card.getAttribute('data-idx'), 10);
+    let val = e.target.value;
+    if (field === 'queue') val = Math.max(0, parseInt(val, 10) || 0);
+    state.books[idx][field] = val;
+    setDirty(true);
+    if (field === 'img') { // live-update the thumbnail
+      const wrap = card.querySelector('.thumb-wrap');
+      wrap.querySelector('.thumb')?.remove();
+      const ph = wrap.querySelector('.thumb-ph');
+      if (val) {
+        const img = document.createElement('img');
+        img.className = 'thumb'; img.src = val; img.alt = '';
+        img.onerror = function(){ this.style.display='none'; ph.style.display='flex'; };
+        ph.style.display = 'none';
+        wrap.insertBefore(img, ph);
+      } else { ph.style.display = 'flex'; }
+    }
+  });
+  cards.addEventListener('change', e => {
+    const field = e.target.getAttribute('data-field');
+    if (field === 'genre' || field === 'avail') {
+      const idx = parseInt(e.target.closest('.book-card').getAttribute('data-idx'), 10);
+      state.books[idx][field] = e.target.value;
+      setDirty(true);
+    }
+  });
+  cards.addEventListener('click', e => {
+    const act = e.target.getAttribute('data-act');
+    if (!act) return;
+    const idx = parseInt(e.target.closest('.book-card').getAttribute('data-idx'), 10);
+    if (act === 'give' || act === 'return') {
+      const bookId = state.books[idx].id;
+      if (state.dirty && !confirm('You have unsaved edits. This action saves immediately and reloads the catalogue \u2014 unsaved edits will be lost. Continue?')) return;
+      e.target.disabled = true;
+      (async () => {
+        try {
+          const url = act === 'give' ? 'api/admin/books/give' : 'api/admin/books/return';
+          const body = act === 'give'
+            ? { id: bookId, email: e.target.getAttribute('data-email') }
+            : { id: bookId };
+          const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+          const data = await res.json().catch(() => ({}));
+          if (res.status === 403) { showLogin(); return; }
+          if (res.ok) {
+            msg(document.getElementById('adminMsg'), data.message || 'Done.', 'ok');
+            setTimeout(() => msg(document.getElementById('adminMsg'), '', ''), 5000);
+            await loadBooks();
+            await loadUsers();
+          } else {
+            msg(document.getElementById('adminMsg'), data.error || 'Action failed.', 'err');
+            e.target.disabled = false;
+          }
+        } catch { msg(document.getElementById('adminMsg'), 'Network error.', 'err'); e.target.disabled = false; }
+      })();
+      return;
+    }
+    if (act === 'clearloan') {
+      state.books[idx].borrowedBy = null;
+      state.books[idx].reservations = [];
+      state.books[idx].queue = 0;
+      if (state.books[idx].avail === 'On Loan') state.books[idx].avail = 'Available';
+      setDirty(true); renderAll(); return;
+    }
+    if (act === 'del') {
+      if (!confirm(`Delete "${state.books[idx].title || 'this book'}"?`)) return;
+      state.books.splice(idx, 1);
+    } else if (act === 'up' && idx > 0) {
+      [state.books[idx - 1], state.books[idx]] = [state.books[idx], state.books[idx - 1]];
+    } else if (act === 'down' && idx < state.books.length - 1) {
+      [state.books[idx + 1], state.books[idx]] = [state.books[idx], state.books[idx + 1]];
+    } else return;
+    setDirty(true); renderAll();
+  });
+
+  // warn before leaving with unsaved changes
+  window.addEventListener('beforeunload', e => { if (state.dirty) { e.preventDefault(); e.returnValue = ''; } });
+
+  // go
+  checkAuth();
+</script>
+</body>
+</html>

@@ -1,0 +1,80 @@
+[
+  {
+    "id": 1,
+    "title": "Pride and Prejudice",
+    "author": "Jane Austen",
+    "genre": "Fiction",
+    "year": "1813",
+    "avail": "Available",
+    "queue": 0,
+    "img": "",
+    "blurb": "A comedy of manners following Elizabeth Bennet as she navigates family expectation, first impressions and the reserved Mr Darcy.",
+    "borrowedBy": null,
+    "reservations": []
+  },
+  {
+    "id": 2,
+    "title": "The Voyage of the Beagle",
+    "author": "Charles Darwin",
+    "genre": "Science",
+    "year": "1839",
+    "avail": "On Loan",
+    "queue": 2,
+    "img": "",
+    "blurb": "Darwin's journal of the survey expedition that shaped his thinking on geology, natural history and the origin of species.",
+    "borrowedBy": null,
+    "reservations": []
+  },
+  {
+    "id": 3,
+    "title": "A Study in Scarlet",
+    "author": "Arthur Conan Doyle",
+    "genre": "Mystery",
+    "year": "1887",
+    "avail": "Available",
+    "queue": 0,
+    "img": "",
+    "blurb": "The first Sherlock Holmes story, introducing the detective and Dr Watson through a baffling London murder.",
+    "borrowedBy": null,
+    "reservations": []
+  },
+  {
+    "id": 4,
+    "title": "The Wealth of Nations",
+    "author": "Adam Smith",
+    "genre": "Non-Fiction",
+    "year": "1776",
+    "avail": "Reference Only",
+    "queue": 0,
+    "img": "",
+    "blurb": "The foundational work of modern economics, on the division of labour, markets and the causes of national prosperity.",
+    "borrowedBy": null,
+    "reservations": []
+  },
+  {
+    "id": 5,
+    "title": "A Room of One's Own",
+    "author": "Virginia Woolf",
+    "genre": "Non-Fiction",
+    "year": "1929",
+    "avail": "Available",
+    "queue": 0,
+    "img": "",
+    "blurb": "An extended essay on women, fiction and the material conditions that make writing possible.",
+    "borrowedBy": null,
+    "reservations": []
+  },
+  {
+    "id": 6,
+    "title": "The History of the Peloponnesian War",
+    "author": "Thucydides",
+    "genre": "History",
+    "year": "c. 400 BC",
+    "avail": "Available",
+    "queue": 0,
+    "img": "",
+    "blurb": "A contemporary account of the long conflict between Athens and Sparta, and a founding text of political history.",
+    "borrowedBy": null,
+    "reservations": []
+  }
+]

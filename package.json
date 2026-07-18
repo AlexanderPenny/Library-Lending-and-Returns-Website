@@ -1,0 +1,23 @@
+{
+  "name": "lending-library",
+  "version": "1.0.0",
+  "description": "Self-hosted lending library: public catalogue, member accounts with email verification and admin approval, reservations, waiting lists and loan tracking. Data stored in plain JSON files.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "set-password": "node scripts/set-password.js",
+    "gen-secret": "node -e \"console.log(require('crypto').randomBytes(48).toString('hex'))\"",
+    "setup": "node scripts/setup.js"
+  },
+  "keywords": ["library", "catalogue", "lending", "self-hosted", "books", "raspberry-pi"],
+  "license": "MIT",
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "express-session": "^1.18.0",
+    "helmet": "^7.1.0",
+    "nodemailer": "^6.9.14"
+  }
+}
