@@ -227,11 +227,25 @@
     .g-science    { background: #eaf3de;                    color: #27500a;                    border-color: #97c459; }
     .g-reference  { background: var(--surface2);            color: var(--text-2);              border-color: var(--border-med); }
     .g-theology   { background: var(--tag-theology-bg);     color: var(--tag-theology-text);   border-color: var(--tag-theology-border); }
+    /* Fallback palette for custom genres added via the GENRES env var. */
+    .g-p1 { background: #e7edff; color: #2a3d8f; border-color: #b9c6f4; }
+    .g-p2 { background: #ffe9e0; color: #8a3b1a; border-color: #f6b79a; }
+    .g-p3 { background: #e3f3ec; color: #1f5c43; border-color: #a6d4bf; }
+    .g-p4 { background: #f3e8fb; color: #5b2a86; border-color: #d3b6ec; }
+    .g-p5 { background: #fcefc7; color: #7a5500; border-color: #e7cf83; }
+    .g-p6 { background: #e0f0f4; color: #1a5566; border-color: #a7d3de; }
     .a-yes     { background: #eaf3de; color: #27500a; border-color: #97c459; }
     .a-no      { background: var(--warn-bg);   color: var(--warn-text);   border-color: #fac775; }
     .a-res { background: #fef3c7; color: #92400e; }
     .a-ref     { background: var(--info-bg);   color: var(--info-text);   border-color: #b5d4f4; }
     .a-unavail { background: var(--danger-bg); color: var(--danger-text); border-color: #f09595; }
+    /* Fallback palette for custom statuses added via the STATUSES env var. */
+    .a-p1 { background: #ede9e0; color: #5a5238; border-color: #cabf9f; }
+    .a-p2 { background: #e6e0f0; color: #4a3b70; border-color: #c2b3e0; }
+    .a-p3 { background: #fbe4ec; color: #8a2b52; border-color: #f0a8c2; }
+    .a-p4 { background: #e0eef0; color: #1f5560; border-color: #a7cdd4; }
+    .a-p5 { background: #f0ead8; color: #6b5a1a; border-color: #d8c78a; }
+    .a-p6 { background: #e8e8ea; color: #44454a; border-color: #c2c3c8; }
 
     .queue-cell { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-2); }
     .queue-cell svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.5; flex-shrink: 0; }
@@ -477,21 +491,11 @@
       <input type="text" id="q" placeholder="Search title or author…" oninput="render()" />
       <select id="gf" onchange="render()">
         <option value="">All genres</option>
-        <option>Fiction</option>
-        <option>Non-Fiction</option>
-        <option>Mystery</option>
-        <option>History</option>
-        <option>Science</option>
-        <option>Reference</option>
-        <option>Theology</option>
+        <!-- genre options are populated from the configured GENRES list on load -->
       </select>
       <select id="af" onchange="render()">
         <option value="">All availability</option>
-        <option>Available</option>
-        <option>Reserved</option>
-        <option>On Loan</option>
-        <option>Reference Only</option>
-        <option>Unavailable</option>
+        <!-- availability options are populated from the configured STATUSES list on load -->
       </select>
     </div>
 
@@ -574,12 +578,38 @@
   </div>
 
   <script>
-    const GC = {
-      Fiction:'g-fiction','Non-Fiction':'g-nonfiction',Mystery:'g-mystery',
-      History:'g-history',Science:'g-science',Reference:'g-reference',Theology:'g-theology'
+    // Configured genre list, injected by the server from the GENRES env var.
+    const GENRES = {{GENRES_JSON}};
+    // Named colours for the built-in genres; anything custom cycles through a palette.
+    const KNOWN_GC = {
+      'fiction':'g-fiction','non-fiction':'g-nonfiction','mystery':'g-mystery',
+      'history':'g-history','science':'g-science','reference':'g-reference','theology':'g-theology'
     };
-    const AC = {Available:'a-yes',Reserved:'a-res','On Loan':'a-no','Reference Only':'a-ref',Unavailable:'a-unavail'};
-    const AL = {Available:'Available',Reserved:'Reserved','On Loan':'On loan','Reference Only':'Ref only',Unavailable:'Unavailable'};
+    const GC_PALETTE = ['g-p1','g-p2','g-p3','g-p4','g-p5','g-p6'];
+    const GC = {};
+    GENRES.forEach((g, i) => { GC[g] = KNOWN_GC[String(g).toLowerCase()] || GC_PALETTE[i % GC_PALETTE.length]; });
+    // Populate the genre filter dropdown from the same list.
+    (function () {
+      const gf = document.getElementById('gf');
+      if (gf) GENRES.forEach(g => { const o = document.createElement('option'); o.textContent = g; gf.appendChild(o); });
+    })();
+
+    // Configured status list, injected by the server from the STATUSES env var.
+    const STATUSES = {{STATUSES_JSON}};
+    // Statuses a book can be reserved from or queued behind; anything else is out of circulation.
+    const CIRCULATING = ['Available', 'Reserved', 'On Loan'];
+    // Named badge classes / short labels for the built-in statuses; custom ones use a palette
+    // and show their own name.
+    const KNOWN_AC = {Available:'a-yes',Reserved:'a-res','On Loan':'a-no','Reference Only':'a-ref',Unavailable:'a-unavail'};
+    const KNOWN_AL = {Available:'Available',Reserved:'Reserved','On Loan':'On loan','Reference Only':'Ref only',Unavailable:'Unavailable'};
+    const AC_PALETTE = ['a-p1','a-p2','a-p3','a-p4','a-p5','a-p6'];
+    const AC = {}, AL = {};
+    STATUSES.forEach((s, i) => { AC[s] = KNOWN_AC[s] || AC_PALETTE[i % AC_PALETTE.length]; AL[s] = KNOWN_AL[s] || s; });
+    // Populate the availability filter dropdown from the same list.
+    (function () {
+      const af = document.getElementById('af');
+      if (af) STATUSES.forEach(s => { const o = document.createElement('option'); o.textContent = s; af.appendChild(o); });
+    })();
 
     let books = [];
     let activeId = null;
@@ -736,6 +766,10 @@
       }
       if (b.avail === 'Reference Only') {
         return `<div class="blurb-actions"><span class="act-note">Reference only \u2014 not available to take out.</span></div>`;
+      }
+      // any other out-of-circulation status (Unavailable, or a custom one like Lost)
+      if (!CIRCULATING.includes(b.avail)) {
+        return `<div class="blurb-actions"><span class="act-note">${esc(AL[b.avail] || b.avail)} \u2014 not available to take out.</span></div>`;
       }
       // this member already holds/reserved THIS book
       if (myHolding.holding && myHolding.id === b.id) {

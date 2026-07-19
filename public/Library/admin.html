@@ -127,6 +127,13 @@
     .wl-add-name { flex: 1; min-width: 140px; font-family: inherit; font-size: 12px; color: var(--text); background: var(--surface); border: 1px solid var(--border-med); border-radius: var(--radius-sm); padding: 5px 8px; outline: none; }
     .wl-add-name:focus { border-color: var(--accent); }
 
+    /* categories & statuses editor */
+    .tag-editor { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+    .tag-row { display: flex; align-items: center; gap: 6px; }
+    .tag-row input { flex: 1; min-width: 120px; max-width: 320px; font-family: inherit; font-size: 13px; color: var(--text); background: var(--surface); border: 1px solid var(--border-med); border-radius: var(--radius-sm); padding: 6px 9px; outline: none; }
+    .tag-row input:focus { border-color: var(--accent); }
+    .tag-row .tag-btn { padding: 4px 9px; font-size: 13px; line-height: 1; }
+
     /* raw json */
     #rawWrap { display: none; }
     #rawJson { width: 100%; min-height: 55vh; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 12px; line-height: 1.55; padding: 14px; border: 1px solid var(--border-med); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); outline: none; }
@@ -191,6 +198,33 @@
       </div>
     </div>
 
+    <!-- CATEGORIES & STATUSES -->
+    <div class="members-card">
+      <div class="members-head">
+        <div class="members-title">Categories &amp; statuses</div>
+        <button id="settingsToggle" class="btn btn-sm">Show</button>
+      </div>
+      <div id="settingsPanel" style="display:none">
+        <div class="member-group-title">Genres</div>
+        <div id="genreEditor" class="tag-editor"></div>
+        <button class="btn btn-sm" data-tagadd="genre">+ Add genre</button>
+
+        <div class="member-group-title" style="margin-top:14px">Statuses</div>
+        <div class="count-note" style="margin-bottom:8px">
+          Built-in workflow statuses are always available and can't be changed:
+          <strong>Available, Reserved, On&nbsp;Loan, Reference&nbsp;Only</strong>.
+          Anything you add below is an "out of circulation" label — a book in it can't be reserved.
+        </div>
+        <div id="statusEditor" class="tag-editor"></div>
+        <button class="btn btn-sm" data-tagadd="status">+ Add status</button>
+
+        <div class="footer-actions">
+          <span id="settingsNote" class="count-note"></span>
+          <button id="saveSettings" class="btn btn-primary btn-sm">Save categories &amp; statuses</button>
+        </div>
+      </div>
+    </div>
+
     <div class="toolbar">
       <button id="addBtn" class="btn btn-primary btn-sm">+ Add book</button>
       <input id="filter" type="text" placeholder="Filter by title or author…" />
@@ -221,8 +255,11 @@
 </div>
 
 <script>
-  const GENRES = ['Fiction','Non-Fiction','Mystery','History','Science','Reference','Theology'];
-  const AVAIL  = ['Available','Reserved','On Loan','Reference Only','Unavailable'];
+  // Injected by the server; kept mutable so the settings editor can update them live.
+  let GENRES = {{GENRES_JSON}};
+  let AVAIL  = {{STATUSES_JSON}};
+  const CORE_STATUSES = ['Available', 'Reserved', 'On Loan', 'Reference Only'];
+  let DEFAULT_GENRE = GENRES.includes('Non-Fiction') ? 'Non-Fiction' : GENRES[0];
 
   const bookIconTxt = 'No cover';
 
@@ -462,6 +499,114 @@
     if (!open) loadUsers();
   });
 
+  // ---------- categories & statuses editor ----------
+  let settingsState = { genres: [], statuses: [] };
+  let settingsLoaded = false;
+
+  async function loadSettings() {
+    try {
+      const res = await fetch('api/admin/settings', { cache: 'no-store' });
+      if (res.status === 403) { showLogin(); return; }
+      if (!res.ok) return;
+      const data = await res.json();
+      settingsState = { genres: (data.genres || []).slice(), statuses: (data.statuses || []).slice() };
+      settingsLoaded = true;
+      renderTagEditors();
+    } catch {}
+  }
+
+  function tagRow(kind, value, idx, total) {
+    return `<div class="tag-row" data-kind="${kind}" data-idx="${idx}">
+      <input type="text" value="${escapeHtml(value)}" data-tag="${kind}" placeholder="${kind === 'genre' ? 'Genre name' : 'Status name'}" maxlength="60">
+      <button class="btn btn-sm tag-btn" data-tagact="up" title="Move up"${idx === 0 ? ' disabled' : ''}>&uarr;</button>
+      <button class="btn btn-sm tag-btn" data-tagact="down" title="Move down"${idx === total - 1 ? ' disabled' : ''}>&darr;</button>
+      <button class="btn btn-sm btn-danger tag-btn" data-tagact="remove" title="Remove">&times;</button>
+    </div>`;
+  }
+
+  function renderTagEditors() {
+    document.getElementById('genreEditor').innerHTML =
+      settingsState.genres.map((v, i) => tagRow('genre', v, i, settingsState.genres.length)).join('');
+    document.getElementById('statusEditor').innerHTML =
+      settingsState.statuses.map((v, i) => tagRow('status', v, i, settingsState.statuses.length)).join('');
+  }
+
+  // Read the current input values back into state before any structural change.
+  function syncTagsFromDom() {
+    settingsState.genres = [...document.querySelectorAll('#genreEditor input[data-tag="genre"]')].map(i => i.value);
+    settingsState.statuses = [...document.querySelectorAll('#statusEditor input[data-tag="status"]')].map(i => i.value);
+  }
+
+  function settingsMsg(text, isErr) {
+    const el = document.getElementById('settingsNote');
+    el.textContent = text;
+    el.style.color = isErr ? 'var(--danger-text)' : 'var(--accent)';
+    if (text && !isErr) setTimeout(() => { el.textContent = ''; }, 3500);
+  }
+
+  document.getElementById('settingsToggle').addEventListener('click', () => {
+    const p = document.getElementById('settingsPanel');
+    const open = p.style.display !== 'none';
+    p.style.display = open ? 'none' : 'block';
+    document.getElementById('settingsToggle').textContent = open ? 'Show' : 'Hide';
+    if (!open && !settingsLoaded) loadSettings();
+  });
+
+  document.getElementById('settingsPanel').addEventListener('click', e => {
+    const addBtn = e.target.closest('[data-tagadd]');
+    if (addBtn) {
+      syncTagsFromDom();
+      const kind = addBtn.getAttribute('data-tagadd');
+      settingsState[kind === 'genre' ? 'genres' : 'statuses'].push('');
+      renderTagEditors();
+      const sel = kind === 'genre' ? '#genreEditor' : '#statusEditor';
+      const inputs = document.querySelectorAll(`${sel} input`);
+      if (inputs.length) inputs[inputs.length - 1].focus();
+      return;
+    }
+    const actBtn = e.target.closest('[data-tagact]');
+    if (!actBtn) return;
+    syncTagsFromDom();
+    const row = actBtn.closest('.tag-row');
+    const kind = row.getAttribute('data-kind');
+    const idx = parseInt(row.getAttribute('data-idx'), 10);
+    const arr = settingsState[kind === 'genre' ? 'genres' : 'statuses'];
+    const act = actBtn.getAttribute('data-tagact');
+    if (act === 'remove') arr.splice(idx, 1);
+    else if (act === 'up' && idx > 0) [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
+    else if (act === 'down' && idx < arr.length - 1) [arr[idx + 1], arr[idx]] = [arr[idx], arr[idx + 1]];
+    renderTagEditors();
+  });
+
+  document.getElementById('saveSettings').addEventListener('click', async () => {
+    syncTagsFromDom();
+    const genres = [...new Set(settingsState.genres.map(x => x.trim()).filter(Boolean))];
+    const statuses = [...new Set(settingsState.statuses.map(x => x.trim()).filter(Boolean))]
+      .filter(s => !CORE_STATUSES.includes(s));
+    if (!genres.length) { settingsMsg('Add at least one genre.', true); return; }
+    const btn = document.getElementById('saveSettings');
+    btn.disabled = true;
+    try {
+      const res = await fetch('api/admin/settings', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ genres, statuses })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 403) { showLogin(); return; }
+      if (res.ok) {
+        GENRES = data.genres; AVAIL = data.avail;
+        DEFAULT_GENRE = GENRES.includes('Non-Fiction') ? 'Non-Fiction' : GENRES[0];
+        settingsState = { genres: data.genres.slice(), statuses: data.statuses.slice() };
+        renderTagEditors();
+        renderAll();   // rebuild book-card dropdowns with the new lists (keeps unsaved book edits)
+        settingsMsg('Saved. Categories and statuses updated across the catalogue.', false);
+      } else {
+        settingsMsg(data.error || 'Could not save.', true);
+      }
+    } catch { settingsMsg('Network error. Please try again.', true); }
+    finally { btn.disabled = false; }
+  });
+
   function nextId() {
     return state.books.reduce((m, b) => Math.max(m, parseInt(b.id, 10) || 0), 0) + 1;
   }
@@ -501,7 +646,13 @@
 
   // ---------- rendering (form mode) ----------
   function optionList(values, selected) {
-    return values.map(v => `<option${v === selected ? ' selected' : ''}>${escapeHtml(v)}</option>`).join('');
+    // If a book still uses a value that was since removed from the list, keep it as an
+    // option (flagged) so it isn't silently overwritten just by opening the card.
+    const list = (selected && !values.includes(selected)) ? [selected, ...values] : values;
+    return list.map(v => {
+      const label = (selected && v === selected && !values.includes(v)) ? `${escapeHtml(v)} (removed)` : escapeHtml(v);
+      return `<option value="${escapeHtml(v)}"${v === selected ? ' selected' : ''}>${label}</option>`;
+    }).join('');
   }
   function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
@@ -633,7 +784,7 @@
   document.getElementById('applyRaw').addEventListener('click', applyRaw);
 
   document.getElementById('addBtn').addEventListener('click', () => {
-    state.books.unshift({ id: nextId(), title: '', author: '', genre: 'Non-Fiction', year: '', avail: 'Available', img: '', blurb: '', waitlist: [] });
+    state.books.unshift({ id: nextId(), title: '', author: '', genre: DEFAULT_GENRE, year: '', avail: 'Available', img: '', blurb: '', waitlist: [] });
     state.filter = ''; document.getElementById('filter').value = '';
     setDirty(true); renderAll();
     // focus the new card's title

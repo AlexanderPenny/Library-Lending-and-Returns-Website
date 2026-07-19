@@ -39,6 +39,8 @@
  *   POST /Library/api/admin/books/waitlist/add      { id, name } -> add an offline (non-website) waiter
  *   POST /Library/api/admin/books/waitlist/remove   { id, entryId }
  *   POST /Library/api/admin/books/waitlist/move     { id, entryId, direction: up|down }
+ *   GET  /Library/api/admin/settings                 current genres & statuses
+ *   POST /Library/api/admin/settings                 { genres:[], statuses:[] } -> save & apply
  *
  * The waiting list for a book is a single ordered array (`waitlist`) mixing
  * website members and offline (in-person/phone) waiters the admin adds by name.
@@ -85,6 +87,7 @@ const PUBLIC_URL = (process.env.PUBLIC_URL || `http://localhost:${process.env.PO
 const DATA_DIR = path.join(__dirname, 'data');
 const BOOKS_FILE = process.env.DATA_FILE || path.join(DATA_DIR, 'books.json');
 const USERS_FILE = process.env.USERS_FILE || path.join(DATA_DIR, 'users.json');
+const SETTINGS_FILE = process.env.SETTINGS_FILE || path.join(DATA_DIR, 'settings.json');
 const AUTH_LOG = process.env.AUTH_LOG || path.join(__dirname, 'logs', 'auth.log');
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || '';
@@ -117,6 +120,10 @@ function pageTokens() {
     '{{HOME_URL}}': escapeHtmlPage(HOME_URL),
     '{{PUBLIC_URL}}': escapeHtmlPage(PUBLIC_URL),
     '{{BASE_PATH}}': escapeHtmlPage(BASE_PATH),
+    // Raw JSON array injected into a <script> on both pages. Not HTML-escaped (it must
+    // stay valid JS), but `<` is neutralised so a genre name can't break out of the tag.
+    '{{GENRES_JSON}}': JSON.stringify(VALID_GENRES).replace(/</g, '\\u003c'),
+    '{{STATUSES_JSON}}': JSON.stringify(VALID_AVAIL).replace(/</g, '\\u003c'),
   };
 }
 const _pageCache = {};
@@ -174,8 +181,42 @@ function withLock(key, fn) {
 }
 
 // ---------- books ----------
-const VALID_GENRES = ['Fiction', 'Non-Fiction', 'Mystery', 'History', 'Science', 'Reference', 'Theology'];
-const VALID_AVAIL = ['Available', 'Reserved', 'On Loan', 'Reference Only', 'Unavailable'];
+// Genres and statuses are editable from the admin panel and persisted to
+// data/settings.json. The env vars GENRES / STATUSES only seed the initial list when
+// no settings file exists yet; once you save from the panel, settings.json wins.
+// The lists are the single source of truth: they validate saved books and are injected
+// into both HTML pages (filters, badge colours, admin dropdowns).
+//
+// The four CORE statuses drive the lending workflow (reserve / give / return branch on
+// them by name), so they are always present and can't be removed. Extra statuses are
+// "not in circulation" labels — shown everywhere, but a book in one can't be reserved.
+const DEFAULT_GENRES = ['Fiction', 'Non-Fiction', 'Mystery', 'History', 'Science', 'Reference', 'Theology'];
+const CORE_STATUSES = ['Available', 'Reserved', 'On Loan', 'Reference Only'];
+// A book in one of these can be reserved (Available) or queued behind (Reserved/On Loan).
+const CIRCULATING_STATUSES = ['Available', 'Reserved', 'On Loan'];
+
+function buildAvail(extra) {
+  return [...CORE_STATUSES, ...extra.filter(s => !CORE_STATUSES.includes(s))];
+}
+// Live, mutable lists — reassigned when settings are saved from the admin panel.
+let VALID_GENRES = (process.env.GENRES || '').split(',').map(s => s.trim()).filter(Boolean);
+if (!VALID_GENRES.length) VALID_GENRES = DEFAULT_GENRES.slice();
+let EXTRA_STATUSES = (process.env.STATUSES || '').split(',').map(s => s.trim()).filter(Boolean);
+if (!EXTRA_STATUSES.length) EXTRA_STATUSES = ['Unavailable'];
+let VALID_AVAIL = buildAvail(EXTRA_STATUSES);
+
+// Override the env/default seed with data/settings.json if it exists (created the first
+// time you save genres/statuses from the admin panel).
+(function loadSettings() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
+    if (Array.isArray(raw.genres) && raw.genres.length) VALID_GENRES = raw.genres.map(String);
+    if (Array.isArray(raw.statuses)) {
+      EXTRA_STATUSES = raw.statuses.map(String).filter(s => !CORE_STATUSES.includes(s));
+      VALID_AVAIL = buildAvail(EXTRA_STATUSES);
+    }
+  } catch (e) { if (e.code !== 'ENOENT') console.error('settings load failed:', e.message); }
+})();
 
 // One ordered waiting list per book, mixing website members and offline
 // (in-person/phone) waiters. Each entry has a stable `id` so admin actions
@@ -208,7 +249,7 @@ function normaliseBook(b, i) {
     id: Number.isFinite(parseInt(b.id, 10)) ? parseInt(b.id, 10) : i + 1,
     title: String(b.title || '').slice(0, 500),
     author: String(b.author || '').slice(0, 500),
-    genre: VALID_GENRES.includes(b.genre) ? b.genre : 'Non-Fiction',
+    genre: VALID_GENRES.includes(b.genre) ? b.genre : VALID_GENRES[0],
     year: String(b.year || '').slice(0, 20),
     avail: VALID_AVAIL.includes(b.avail) ? b.avail : 'Available',
     img: String(b.img || '').slice(0, 2000),
@@ -474,7 +515,11 @@ r.post('/api/reserve', requireMember, async (req, res) => {
       const books = await readBooks();
       const b = books.find(x => x.id === id);
       if (!b) return { error: 'Book not found', code: 404 };
-      if (b.avail === 'Reference Only') return { error: 'This book is reference only and can\u2019t be taken out.', code: 409 };
+      if (!CIRCULATING_STATUSES.includes(b.avail)) {
+        return { error: b.avail === 'Reference Only'
+          ? 'This book is reference only and can\u2019t be taken out.'
+          : `\u201c${b.title}\u201d isn\u2019t available to take out.`, code: 409 };
+      }
 
       // one book per member
       const held = holdingOf(books, me.email);
@@ -686,6 +731,39 @@ r.post('/api/admin/books/waitlist/move', requireAdmin, async (req, res) => {
   });
   if (out.error) return res.status(400).json(out);
   res.json({ ok: true });
+});
+
+// -- admin: read genres & statuses (for the settings editor) --
+r.get('/api/admin/settings', requireAdmin, (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ genres: VALID_GENRES, statuses: EXTRA_STATUSES, coreStatuses: CORE_STATUSES, avail: VALID_AVAIL });
+});
+
+// -- admin: save genres & statuses --
+// Persists to data/settings.json and updates the live lists immediately (no restart).
+r.post('/api/admin/settings', requireAdmin, async (req, res) => {
+  try {
+    const clean = (arr) => Array.isArray(arr)
+      ? [...new Set(arr.map(x => String(x == null ? '' : x).trim()).filter(Boolean))]
+      : null;
+    const genres = clean(req.body && req.body.genres);
+    let statuses = clean(req.body && req.body.statuses) || [];
+    if (!genres || !genres.length) return res.status(400).json({ error: 'Add at least one genre.' });
+    if (genres.length > 100 || statuses.length > 100) return res.status(400).json({ error: 'Too many entries.' });
+    if ([...genres, ...statuses].some(x => x.length > 60)) return res.status(400).json({ error: 'Each name must be 60 characters or fewer.' });
+    // Extra statuses can never shadow the fixed workflow ones.
+    statuses = statuses.filter(s => !CORE_STATUSES.includes(s));
+
+    await withLock('settings', () => writeJson(SETTINGS_FILE, { genres, statuses }));
+    VALID_GENRES = genres;
+    EXTRA_STATUSES = statuses;
+    VALID_AVAIL = buildAvail(statuses);
+    // Drop any cached rendered pages so they re-inject the new lists on next serve.
+    for (const k of Object.keys(_pageCache)) delete _pageCache[k];
+
+    logAuth('SETTINGS', req, `genres=${genres.length} statuses=${statuses.length}`);
+    res.json({ ok: true, genres: VALID_GENRES, statuses: EXTRA_STATUSES, coreStatuses: CORE_STATUSES, avail: VALID_AVAIL });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Could not save settings.' }); }
 });
 
 // -- admin: full catalogue --

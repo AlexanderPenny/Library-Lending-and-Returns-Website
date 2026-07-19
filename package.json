@@ -1,6 +1,6 @@
 {
   "name": "lending-library",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Self-hosted lending library: public catalogue, member accounts with email verification and admin approval, reservations, waiting lists and loan tracking. Data stored in plain JSON files.",
   "main": "server.js",
   "scripts": {

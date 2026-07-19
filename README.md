@@ -126,8 +126,10 @@ Book comes back
                              └─ nobody waiting? → back to Available
 ```
 
-**Statuses**: `Available`, `Reserved`, `On Loan`, `Reference Only`, `Unavailable`.
-`Reference Only` books can't be reserved at all.
+**Statuses**: `Available`, `Reserved`, `On Loan`, `Reference Only` (the four fixed
+workflow statuses), plus any extra "out of circulation" statuses you configure via
+`STATUSES` (default `Unavailable`). Only `Available`, `Reserved` and `On Loan` books can be
+reserved or queued; `Reference Only` and every extra status can't be taken out.
 
 **One waiting list per book.** Each book has a single ordered `waitlist`, where every entry
 is either a **website member** (who reserved online) or an **offline** person you added by
@@ -302,6 +304,8 @@ All settings live in `.env`. Only the first four are required.
 | `COOKIE_SECURE` | `true` | Require HTTPS for session cookies. `false` only for local http testing |
 | `LIBRARY_NAME` | `Lending Library` | Shown in page titles, headers and emails |
 | `LIBRARY_LOCATION` | *(blank)* | Optional subtitle, e.g. `Bristol, England`. Omitted if blank |
+| `GENRES` | *(built-in list)* | Seeds initial categories; edit later in the admin panel |
+| `STATUSES` | `Unavailable` | Seeds initial extra statuses; edit later in the admin panel |
 | `HOME_URL` | `PUBLIC_URL` | Where the "← Home" button links |
 | `SMTP_HOST` | *(blank)* | Blank disables sending (links go to `logs/mail.log`) |
 | `SMTP_PORT` | `587` | 465 is treated as implicit TLS |
@@ -322,9 +326,22 @@ with one word emphasised in the accent colour (e.g. "Green *Lane* Community Libr
 `public/Library/index.html` and `admin.html`. Both pages are single self-contained files
 with no build step; change and reload.
 
-**Genres** — the list appears in three places, and all three must match:
-`VALID_GENRES` in `server.js`, the `<select id="gf">` options in `index.html`, and
-`GENRES` in `admin.html`.
+**Genres and statuses** — edit these from the admin panel under **Categories &
+statuses**: add, rename, remove and reorder entries, then *Save*. Changes apply
+immediately (no restart) and are stored in `data/settings.json`. One list drives the admin
+dropdown, the catalogue's filter, badge colours (built-in entries keep their named
+colours; custom ones cycle through a fallback palette), and server-side validation.
+
+- **Genres** are fully editable. The first entry is the fallback for any book whose genre
+  isn't in the list, so if you remove a genre, books using it show as that first entry
+  until re-tagged (the admin dropdown flags the old value as *(removed)* so you can spot
+  them).
+- **Statuses**: the four workflow statuses (`Available`, `Reserved`, `On Loan`,
+  `Reference Only`) are fixed because the lending logic depends on them. Anything you add
+  is an "out of circulation" label — shown everywhere, but a book in one can't be reserved.
+
+The `GENRES` and `STATUSES` env vars (see `.env.example`) only **seed** the initial lists
+before you've saved anything from the panel; afterwards `data/settings.json` takes over.
 
 **Emails** — plain HTML files in `lib/templates/`. Edit freely and restart. Available
 tokens: `{{library_name}}` and `{{site_url}}` in all of them, plus
@@ -341,6 +358,7 @@ tokens: `{{library_name}}` and `{{site_url}}` in all of them, plus
 ```
 data/books.json    the catalogue, including loans and per-book waiting lists
 data/users.json    member accounts (bcrypt password hashes, never plaintext)
+data/settings.json genres and statuses saved from the admin panel (auto-created)
 logs/auth.log      login attempts — read by fail2ban
 logs/mail.log      outgoing mail, only when SMTP is not configured
 ```
@@ -427,6 +445,8 @@ All paths are relative to `BASE_PATH`.
 | `POST` | `/api/admin/books/waitlist/add` | `{id, name}` — add an offline person |
 | `POST` | `/api/admin/books/waitlist/remove` | `{id, entryId}` — remove an entry |
 | `POST` | `/api/admin/books/waitlist/move` | `{id, entryId, direction: up\|down}` — reorder |
+| `GET` | `/api/admin/settings` | Current genres & statuses |
+| `POST` | `/api/admin/settings` | `{genres[], statuses[]}` — save & apply immediately |
 | `GET` | `/api/admin/users` | Members, with what each is holding |
 | `POST` | `/api/admin/users/decision` | `{id, decision: approve\|reject}` |
 | `POST` | `/api/admin/users/resend` | `{id}` — resend verification, returns the link |

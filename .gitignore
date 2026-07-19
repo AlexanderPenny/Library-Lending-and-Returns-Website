@@ -3,6 +3,7 @@ node_modules/
 logs/
 data/books.json
 data/users.json
+data/settings.json
 data/.*.tmp
 backups/
 *.log
