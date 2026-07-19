@@ -7,3 +7,8 @@ data/.*.tmp
 backups/
 *.log
 .DS_Store
+
+# local deploy artifacts (patches / tarballs shipped to the server)
+*.patch
+*.tar.gz
+*.tgz

@@ -124,6 +124,8 @@
     .hold-loan { background: #fde8d7; color: #8a4b1a; }
     .hold-res { background: #fef3c7; color: #92400e; }
     .loan-info { font-size: 12px; color: var(--text-2); background: var(--surface2); border-radius: var(--radius-sm); padding: 8px 10px; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+    .wl-add-name { flex: 1; min-width: 140px; font-family: inherit; font-size: 12px; color: var(--text); background: var(--surface); border: 1px solid var(--border-med); border-radius: var(--radius-sm); padding: 5px 8px; outline: none; }
+    .wl-add-name:focus { border-color: var(--accent); }
 
     /* raw json */
     #rawWrap { display: none; }
@@ -504,7 +506,7 @@
   function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
   function loanInfo(b) {
-    const rs = Array.isArray(b.reservations) ? b.reservations : [];
+    const wl = Array.isArray(b.waitlist) ? b.waitlist : [];
     const parts = [];
 
     if (b.borrowedBy && b.borrowedBy.name) {
@@ -513,22 +515,31 @@
         <button class="btn btn-sm" data-act="return">Mark returned</button></div>`);
     }
 
-    if (rs.length) {
-      const rows = rs.map((r, i) => `
+    if (wl.length) {
+      const rows = wl.map((e, i) => {
+        const isMember = e.type === 'member';
+        const label = isMember
+          ? `${escapeHtml(e.name || '')} <span class="li-email">${escapeHtml(e.email || '')}</span>`
+          : `${escapeHtml(e.name || '')} <span class="li-email">(offline)</span>`;
+        return `
         <div class="li-line">
           <span class="li-pos">${i + 1}.</span>
-          ${escapeHtml(r.name || '')} <span class="li-email">${escapeHtml(r.email || '')}</span>
-          <button class="btn btn-sm btn-primary" data-act="give" data-email="${escapeHtml(r.email || '')}"
-            title="Mark this book as handed over">I have given book to ${escapeHtml((r.name || '').split(' ')[0])}</button>
-        </div>`).join('');
-      parts.push(`<div class="li-head">Website reservations (${rs.length})</div>${rows}`);
+          ${label}
+          <button class="btn btn-sm" data-act="wl-up" data-entry="${escapeHtml(e.id)}" title="Move up"${i === 0 ? ' disabled' : ''}>&uarr;</button>
+          <button class="btn btn-sm" data-act="wl-down" data-entry="${escapeHtml(e.id)}" title="Move down"${i === wl.length - 1 ? ' disabled' : ''}>&darr;</button>
+          <button class="btn btn-sm btn-primary" data-act="give" data-entry="${escapeHtml(e.id)}"
+            title="Mark this book as handed over">I have given book to ${escapeHtml((e.name || '').split(' ')[0])}</button>
+          <button class="btn btn-sm btn-danger" data-act="wl-remove" data-entry="${escapeHtml(e.id)}" title="Remove from list">&times;</button>
+        </div>`;
+      }).join('');
+      parts.push(`<div class="li-head">Waiting list (${wl.length}) — order controls who’s next</div>${rows}`);
     }
 
-    if ((b.queue || 0) > 0) {
-      parts.push(`<div class="li-line li-muted">Plus ${b.queue} offline ${b.queue === 1 ? 'person' : 'people'} waiting (your manual count)</div>`);
-    }
+    parts.push(`<div class="li-line">
+      <input type="text" class="wl-add-name" placeholder="Add offline person…" data-book="${escapeHtml(b.id)}">
+      <button class="btn btn-sm" data-act="wl-add" data-book="${escapeHtml(b.id)}">+ Add to waiting list</button>
+    </div>`);
 
-    if (!parts.length) return '';
     return `<div class="full loan-info">${parts.join('')}</div>`;
   }
 
@@ -558,8 +569,7 @@
           <div class="fr"><label>Year</label><input data-field="year" type="text" value="${escapeHtml(b.year)}"></div>
           <div class="fr"><label>Genre</label><select data-field="genre">${optionList(GENRES, b.genre)}</select></div>
           <div class="fr"><label>Status</label><select data-field="avail">${optionList(AVAIL, b.avail)}</select></div>
-          <div class="fr"><label>Offline waiting list (manual count)</label><input data-field="queue" type="number" min="0" value="${escapeHtml(b.queue)}"></div>
-          <div class="fr"><label>Cover image URL</label><input data-field="img" type="text" value="${escapeHtml(b.img)}"></div>
+          <div class="fr full"><label>Cover image URL</label><input data-field="img" type="text" value="${escapeHtml(b.img)}"></div>
           <div class="fr full"><label>Blurb / description</label><textarea data-field="blurb">${escapeHtml(b.blurb)}</textarea></div>
           ${loanInfo(b)}
         </div>
@@ -623,7 +633,7 @@
   document.getElementById('applyRaw').addEventListener('click', applyRaw);
 
   document.getElementById('addBtn').addEventListener('click', () => {
-    state.books.unshift({ id: nextId(), title: '', author: '', genre: 'Non-Fiction', year: '', avail: 'Available', queue: 0, img: '', blurb: '' });
+    state.books.unshift({ id: nextId(), title: '', author: '', genre: 'Non-Fiction', year: '', avail: 'Available', img: '', blurb: '', waitlist: [] });
     state.filter = ''; document.getElementById('filter').value = '';
     setDirty(true); renderAll();
     // focus the new card's title
@@ -641,7 +651,6 @@
     const card = e.target.closest('.book-card');
     const idx = parseInt(card.getAttribute('data-idx'), 10);
     let val = e.target.value;
-    if (field === 'queue') val = Math.max(0, parseInt(val, 10) || 0);
     state.books[idx][field] = val;
     setDirty(true);
     if (field === 'img') { // live-update the thumbnail
@@ -677,7 +686,7 @@
         try {
           const url = act === 'give' ? 'api/admin/books/give' : 'api/admin/books/return';
           const body = act === 'give'
-            ? { id: bookId, email: e.target.getAttribute('data-email') }
+            ? { id: bookId, entryId: e.target.getAttribute('data-entry') }
             : { id: bookId };
           const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
           const data = await res.json().catch(() => ({}));
@@ -695,11 +704,63 @@
       })();
       return;
     }
+    if (act === 'wl-up' || act === 'wl-down' || act === 'wl-remove') {
+      const bookId = state.books[idx].id;
+      const entryId = e.target.getAttribute('data-entry');
+      if (act === 'wl-remove' && !confirm('Remove this person from the waiting list?')) return;
+      if (state.dirty && !confirm('You have unsaved edits. This action saves immediately and reloads the catalogue \u2014 unsaved edits will be lost. Continue?')) return;
+      e.target.disabled = true;
+      (async () => {
+        try {
+          const url = act === 'wl-remove' ? 'api/admin/books/waitlist/remove' : 'api/admin/books/waitlist/move';
+          const body = act === 'wl-remove'
+            ? { id: bookId, entryId }
+            : { id: bookId, entryId, direction: act === 'wl-up' ? 'up' : 'down' };
+          const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+          const data = await res.json().catch(() => ({}));
+          if (res.status === 403) { showLogin(); return; }
+          if (res.ok) {
+            if (data.message) { msg(document.getElementById('adminMsg'), data.message, 'ok'); setTimeout(() => msg(document.getElementById('adminMsg'), '', ''), 3500); }
+            await loadBooks();
+          } else {
+            msg(document.getElementById('adminMsg'), data.error || 'Action failed.', 'err');
+            e.target.disabled = false;
+          }
+        } catch { msg(document.getElementById('adminMsg'), 'Network error.', 'err'); e.target.disabled = false; }
+      })();
+      return;
+    }
+    if (act === 'wl-add') {
+      const bookId = e.target.getAttribute('data-book');
+      const input = e.target.parentElement.querySelector('.wl-add-name');
+      const name = (input && input.value || '').trim();
+      if (!name) { if (input) input.focus(); return; }
+      if (state.dirty && !confirm('You have unsaved edits. This action saves immediately and reloads the catalogue \u2014 unsaved edits will be lost. Continue?')) return;
+      e.target.disabled = true;
+      (async () => {
+        try {
+          const res = await fetch('api/admin/books/waitlist/add', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: parseInt(bookId, 10), name })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.status === 403) { showLogin(); return; }
+          if (res.ok) {
+            msg(document.getElementById('adminMsg'), data.message || 'Added.', 'ok');
+            setTimeout(() => msg(document.getElementById('adminMsg'), '', ''), 3500);
+            await loadBooks();
+          } else {
+            msg(document.getElementById('adminMsg'), data.error || 'Could not add.', 'err');
+            e.target.disabled = false;
+          }
+        } catch { msg(document.getElementById('adminMsg'), 'Network error.', 'err'); e.target.disabled = false; }
+      })();
+      return;
+    }
     if (act === 'clearloan') {
       state.books[idx].borrowedBy = null;
-      state.books[idx].reservations = [];
-      state.books[idx].queue = 0;
-      if (state.books[idx].avail === 'On Loan') state.books[idx].avail = 'Available';
+      state.books[idx].waitlist = [];
+      if (state.books[idx].avail === 'On Loan' || state.books[idx].avail === 'Reserved') state.books[idx].avail = 'Available';
       setDirty(true); renderAll(); return;
     }
     if (act === 'del') {
@@ -711,6 +772,13 @@
       [state.books[idx + 1], state.books[idx]] = [state.books[idx], state.books[idx + 1]];
     } else return;
     setDirty(true); renderAll();
+  });
+  cards.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.classList.contains('wl-add-name')) {
+      e.preventDefault();
+      const btn = e.target.parentElement.querySelector('[data-act="wl-add"]');
+      if (btn) btn.click();
+    }
   });
 
   // warn before leaving with unsaved changes

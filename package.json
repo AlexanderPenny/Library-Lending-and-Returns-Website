@@ -1,6 +1,6 @@
 {
   "name": "lending-library",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Self-hosted lending library: public catalogue, member accounts with email verification and admin approval, reservations, waiting lists and loan tracking. Data stored in plain JSON files.",
   "main": "server.js",
   "scripts": {
@@ -10,7 +10,7 @@
     "setup": "node scripts/setup.js"
   },
   "keywords": ["library", "catalogue", "lending", "self-hosted", "books", "raspberry-pi"],
-  "license": "MIT",
+  "license": "Apache-2.0",
   "engines": { "node": ">=18" },
   "dependencies": {
     "bcryptjs": "^2.4.3",

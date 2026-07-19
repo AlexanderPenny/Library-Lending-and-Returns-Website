@@ -6,11 +6,10 @@
     "genre": "Fiction",
     "year": "1813",
     "avail": "Available",
-    "queue": 0,
     "img": "",
     "blurb": "A comedy of manners following Elizabeth Bennet as she navigates family expectation, first impressions and the reserved Mr Darcy.",
     "borrowedBy": null,
-    "reservations": []
+    "waitlist": []
   },
   {
     "id": 2,
@@ -19,11 +18,13 @@
     "genre": "Science",
     "year": "1839",
     "avail": "On Loan",
-    "queue": 2,
     "img": "",
     "blurb": "Darwin's journal of the survey expedition that shaped his thinking on geology, natural history and the origin of species.",
-    "borrowedBy": null,
-    "reservations": []
+    "borrowedBy": { "name": "Sample Reader", "email": "reader@example.com" },
+    "waitlist": [
+      { "id": "sample-offline-1", "type": "offline", "name": "Someone who asked in person" },
+      { "id": "sample-member-1", "type": "member", "name": "A Website Member", "email": "member@example.com" }
+    ]
   },
   {
     "id": 3,
@@ -32,11 +33,10 @@
     "genre": "Mystery",
     "year": "1887",
     "avail": "Available",
-    "queue": 0,
     "img": "",
     "blurb": "The first Sherlock Holmes story, introducing the detective and Dr Watson through a baffling London murder.",
     "borrowedBy": null,
-    "reservations": []
+    "waitlist": []
   },
   {
     "id": 4,
@@ -45,11 +45,10 @@
     "genre": "Non-Fiction",
     "year": "1776",
     "avail": "Reference Only",
-    "queue": 0,
     "img": "",
     "blurb": "The foundational work of modern economics, on the division of labour, markets and the causes of national prosperity.",
     "borrowedBy": null,
-    "reservations": []
+    "waitlist": []
   },
   {
     "id": 5,
@@ -58,11 +57,10 @@
     "genre": "Non-Fiction",
     "year": "1929",
     "avail": "Available",
-    "queue": 0,
     "img": "",
     "blurb": "An extended essay on women, fiction and the material conditions that make writing possible.",
     "borrowedBy": null,
-    "reservations": []
+    "waitlist": []
   },
   {
     "id": 6,
@@ -71,10 +69,9 @@
     "genre": "History",
     "year": "c. 400 BC",
     "avail": "Available",
-    "queue": 0,
     "img": "",
     "blurb": "A contemporary account of the long conflict between Athens and Sparta, and a founding text of political history.",
     "borrowedBy": null,
-    "reservations": []
+    "waitlist": []
   }
 ]

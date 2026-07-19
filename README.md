@@ -57,9 +57,10 @@ you can read, edit and back up with `cp`.
 - Members **reserve** an available book, or **join the waiting list** for one that's out
 - One book per member at a time
 - You hand the book over and press **"I have given book to …"** → marked *On Loan*
-- **Mark returned** → the next person in line is reserved the book and emailed automatically
-- Your **manual/offline waiting count is kept separate** from website reservations, so
-  editing one never deletes the other
+- **Mark returned** → the book is offered to whoever is genuinely next in line and, if
+  they're a website member, they're emailed automatically
+- **One ordered waiting list per book** mixing website members and offline (in-person /
+  phone) people you add by name — reorder, remove, or hand out of turn from the admin panel
 
 **Admin**
 - Password-protected panel at `/Library/admin`
@@ -109,7 +110,7 @@ Member browses catalogue
         │                          → member emailed "your book is ready"
         │
         └─ book is out ─────────► "Join waiting list"
-                                   → added behind any offline entries
+                                   → added to the end of the one ordered list
                                    → member emailed their position
 
 You meet the member and hand the book over
@@ -120,17 +121,22 @@ You meet the member and hand the book over
 Book comes back
         │
         └─ admin panel ──► "Mark returned"
-                             ├─ someone waiting? → reserved for them + emailed
-                             └─ nobody waiting?  → back to Available
+                             ├─ member next?  → reserved for them + emailed
+                             ├─ offline next? → held for them; you mark it given by hand
+                             └─ nobody waiting? → back to Available
 ```
 
 **Statuses**: `Available`, `Reserved`, `On Loan`, `Reference Only`, `Unavailable`.
 `Reference Only` books can't be reserved at all.
 
-**Offline vs website waiting lists.** The `queue` number on a book is *your* manual count
-of people who asked in person. Website reservations are stored separately. The public page
-shows the two added together, and neither can overwrite the other — so you can freely edit
-your manual count without deleting a member's reservation, and vice versa.
+**One waiting list per book.** Each book has a single ordered `waitlist`, where every entry
+is either a **website member** (who reserved online) or an **offline** person you added by
+name because they asked in person or by phone. Because there's one true order, the position
+a member is told when they join always matches what happens on return, and **"Mark returned"
+always offers the book to whoever is genuinely next** — member or offline. From the admin
+panel you can reorder entries, remove them, add offline people, and hand a book to someone
+out of turn if you've arranged it. The public catalogue only ever shows the *number* waiting,
+never who.
 
 ---
 
@@ -333,7 +339,7 @@ tokens: `{{library_name}}` and `{{site_url}}` in all of them, plus
 ## Data files and backups
 
 ```
-data/books.json    the catalogue, including loans and reservations
+data/books.json    the catalogue, including loans and per-book waiting lists
 data/users.json    member accounts (bcrypt password hashes, never plaintext)
 logs/auth.log      login attempts — read by fail2ban
 logs/mail.log      outgoing mail, only when SMTP is not configured
@@ -414,10 +420,13 @@ All paths are relative to `BASE_PATH`.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/api/admin/books` | Full catalogue incl. borrower and reservations |
+| `GET` | `/api/admin/books` | Full catalogue incl. borrower and waiting list |
 | `PUT` | `/api/books` | Replace the catalogue |
-| `POST` | `/api/admin/books/give` | `{id, email}` — mark handed over |
-| `POST` | `/api/admin/books/return` | `{id}` — mark returned, notify next in line |
+| `POST` | `/api/admin/books/give` | `{id, entryId}` — hand book to that waitlist entry |
+| `POST` | `/api/admin/books/return` | `{id}` — mark returned, offer to next in line |
+| `POST` | `/api/admin/books/waitlist/add` | `{id, name}` — add an offline person |
+| `POST` | `/api/admin/books/waitlist/remove` | `{id, entryId}` — remove an entry |
+| `POST` | `/api/admin/books/waitlist/move` | `{id, entryId, direction: up\|down}` — reorder |
 | `GET` | `/api/admin/users` | Members, with what each is holding |
 | `POST` | `/api/admin/users/decision` | `{id, decision: approve\|reject}` |
 | `POST` | `/api/admin/users/resend` | `{id}` — resend verification, returns the link |

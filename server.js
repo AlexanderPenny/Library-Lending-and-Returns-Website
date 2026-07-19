@@ -25,15 +25,27 @@
  *   GET  /Library/api/me           current session info
  *
  * Members (logged in, approved):
- *   POST /Library/api/borrow       { id } -> mark On Loan to this member
- *   POST /Library/api/reserve      { id } -> join the queue
+ *   POST /Library/api/reserve            { id } -> join the waiting list
+ *   POST /Library/api/cancel-reservation -> leave whatever list you're on
  *
  * Admin (.env credentials):
  *   GET  /Library/admin            admin page
- *   GET  /Library/api/admin/books  full catalogue (incl. borrower/queue detail)
+ *   GET  /Library/api/admin/books  full catalogue (incl. borrower/waitlist detail)
  *   PUT  /Library/api/books        overwrite catalogue
  *   GET  /Library/api/admin/users  list members (for the approval screen)
  *   POST /Library/api/admin/users/decision  { id, decision: approve|reject }
+ *   POST /Library/api/admin/books/give             { id, entryId } -> hand book to that waitlist entry
+ *   POST /Library/api/admin/books/return            { id } -> return; next in the unified waitlist gets it
+ *   POST /Library/api/admin/books/waitlist/add      { id, name } -> add an offline (non-website) waiter
+ *   POST /Library/api/admin/books/waitlist/remove   { id, entryId }
+ *   POST /Library/api/admin/books/waitlist/move     { id, entryId, direction: up|down }
+ *
+ * The waiting list for a book is a single ordered array (`waitlist`) mixing
+ * website members and offline (in-person/phone) waiters the admin adds by name.
+ * There is one true order, so "Mark returned" always offers the book to whoever
+ * is genuinely next, and the position a member is told when they join always
+ * matches what happens later. See normaliseWaitlist() for the one-time
+ * migration from the old separate `queue` count + `reservations` list.
  */
 
 const path = require('path');
@@ -165,6 +177,32 @@ function withLock(key, fn) {
 const VALID_GENRES = ['Fiction', 'Non-Fiction', 'Mystery', 'History', 'Science', 'Reference', 'Theology'];
 const VALID_AVAIL = ['Available', 'Reserved', 'On Loan', 'Reference Only', 'Unavailable'];
 
+// One ordered waiting list per book, mixing website members and offline
+// (in-person/phone) waiters. Each entry has a stable `id` so admin actions
+// (give/remove/reorder) target the right person even after the list reorders.
+function normaliseWaitlistEntry(e) {
+  if (!e || typeof e !== 'object') return null;
+  if (e.type === 'member') {
+    const email = String(e.email || '').toLowerCase().slice(0, 200);
+    if (!email) return null;
+    return { id: String(e.id || crypto.randomUUID()), type: 'member', name: String(e.name || '').slice(0, 200), email, at: e.at || null };
+  }
+  return { id: String(e.id || crypto.randomUUID()), type: 'offline', name: String(e.name || '').slice(0, 200) || 'Unnamed', at: e.at || null };
+}
+function normaliseWaitlist(b) {
+  if (Array.isArray(b.waitlist)) return b.waitlist.map(normaliseWaitlistEntry).filter(Boolean);
+  // Migrate the old model: a manual offline `queue` count (unnamed, always
+  // treated as ahead of the line) plus a `reservations` array of website
+  // members in join order. This ran the two lists independently, so this is
+  // a one-time, best-effort merge — offline entries land unnamed at the
+  // front; the admin can rename or reorder them afterwards.
+  const legacyQueue = Number.isFinite(parseInt(b.queue, 10)) && parseInt(b.queue, 10) > 0 ? parseInt(b.queue, 10) : 0;
+  const offline = Array.from({ length: legacyQueue }, () => ({ id: crypto.randomUUID(), type: 'offline', name: 'Unnamed (from old offline count)', at: null }));
+  const members = (Array.isArray(b.reservations) ? b.reservations : []).map(r => ({
+    id: crypto.randomUUID(), type: 'member', name: String(r.name || '').slice(0, 200), email: String(r.email || '').toLowerCase(), at: r.at || null,
+  }));
+  return offline.concat(members);
+}
 function normaliseBook(b, i) {
   return {
     id: Number.isFinite(parseInt(b.id, 10)) ? parseInt(b.id, 10) : i + 1,
@@ -173,13 +211,10 @@ function normaliseBook(b, i) {
     genre: VALID_GENRES.includes(b.genre) ? b.genre : 'Non-Fiction',
     year: String(b.year || '').slice(0, 20),
     avail: VALID_AVAIL.includes(b.avail) ? b.avail : 'Available',
-    // queue = offline/manual waiting count, controlled only by the admin.
-    // Website member reservations live in `reservations` and are never folded into it.
-    queue: Number.isFinite(parseInt(b.queue, 10)) && parseInt(b.queue, 10) >= 0 ? parseInt(b.queue, 10) : 0,
     img: String(b.img || '').slice(0, 2000),
     blurb: String(b.blurb || '').slice(0, 4000),
     borrowedBy: b.borrowedBy || null,
-    reservations: Array.isArray(b.reservations) ? b.reservations : [],
+    waitlist: normaliseWaitlist(b),
   };
 }
 async function readBooks() {
@@ -187,12 +222,11 @@ async function readBooks() {
   return raw.map(normaliseBook);
 }
 function publicBook(b) {
-  // `queue` shown publicly = manual offline count + website reservations.
-  // Borrower and reservation identities are never exposed publicly.
+  // Borrower and waitlist identities are never exposed publicly, just the count.
   return {
     id: b.id, title: b.title, author: b.author, genre: b.genre, year: b.year,
     avail: b.avail,
-    queue: (b.queue || 0) + ((b.reservations || []).length),
+    queue: (b.waitlist || []).length,
     img: b.img, blurb: b.blurb,
   };
 }
@@ -202,7 +236,7 @@ function holdingOf(books, email) {
   if (!email) return null;
   for (const b of books) {
     if (b.borrowedBy && b.borrowedBy.email === email) return { book: b, kind: 'loan' };
-    if ((b.reservations || []).some(x => x.email === email)) return { book: b, kind: 'reservation' };
+    if ((b.waitlist || []).some(x => x.type === 'member' && x.email === email)) return { book: b, kind: 'reservation' };
   }
   return null;
 }
@@ -453,19 +487,21 @@ r.post('/api/reserve', requireMember, async (req, res) => {
         return { error: `You already have "${held.book.title}" ${held.kind === 'loan' ? 'on loan' : 'reserved'}. Only one book at a time \u2014 please return it first.`, code: 409 };
       }
 
-      b.reservations = b.reservations || [];
+      b.waitlist = b.waitlist || [];
+      const entry = { id: crypto.randomUUID(), type: 'member', name: me.name, email: me.email, at: me.at };
       if (b.avail === 'Available') {
         // free right now -> reserved for this member, awaiting handover by the admin
         b.avail = 'Reserved';
-        b.reservations.push(me);
+        b.waitlist.push(entry);
         await writeJson(BOOKS_FILE, books);
         mail = { kind: 'available', book: b };
         return { ok: true, message: `Reserved for you. We\u2019ll be in touch to arrange collection of "${b.title}".` };
       }
 
-      // already out or reserved -> join the waiting list, behind any offline entries
-      b.reservations.push(me);
-      const position = (b.queue || 0) + b.reservations.length;
+      // already out or reserved -> join the single ordered waiting list, behind
+      // anyone (online or offline) already on it
+      b.waitlist.push(entry);
+      const position = b.waitlist.length;
       await writeJson(BOOKS_FILE, books);
       mail = { kind: 'waiting', book: b, position };
       return { ok: true, message: `Added to the waiting list for "${b.title}" \u2014 you\u2019re number ${position}.` };
@@ -493,10 +529,10 @@ r.post('/api/cancel-reservation', requireMember, async (req, res) => {
     const books = await readBooks();
     let changed = null;
     for (const b of books) {
-      const before = (b.reservations || []).length;
-      b.reservations = (b.reservations || []).filter(x => x.email !== email);
-      if (b.reservations.length !== before) {
-        if (b.avail === 'Reserved' && b.reservations.length === 0) b.avail = 'Available';
+      const before = (b.waitlist || []).length;
+      b.waitlist = (b.waitlist || []).filter(x => !(x.type === 'member' && x.email === email));
+      if (b.waitlist.length !== before) {
+        if (b.avail === 'Reserved' && b.waitlist.length === 0) b.avail = 'Available';
         changed = b;
       }
     }
@@ -518,39 +554,51 @@ r.get('/api/my-holding', requireMember, async (req, res) => {
 });
 
 // -- admin: hand the book over ("I have given book to ...") --
+// Targets a specific waitlist entry (member or offline) by id, not
+// necessarily the one at the front \u2014 the admin may have arranged a handover
+// out of turn, and that's their call to make.
 r.post('/api/admin/books/give', requireAdmin, async (req, res) => {
   const id = parseInt(req.body && req.body.id, 10);
-  const email = String((req.body && req.body.email) || '').toLowerCase();
+  const entryId = String((req.body && req.body.entryId) || '');
   const out = await withLock('books', async () => {
     const books = await readBooks();
     const b = books.find(x => x.id === id);
     if (!b) return { error: 'Book not found' };
-    const person = (b.reservations || []).find(x => (x.email || '').toLowerCase() === email);
-    if (!person) return { error: 'That person is not on this book\u2019s list.' };
-    b.borrowedBy = { name: person.name, email: person.email };
+    const i = (b.waitlist || []).findIndex(x => x.id === entryId);
+    if (i === -1) return { error: 'That person is not on this book\u2019s waiting list.' };
+    const entry = b.waitlist[i];
+    b.borrowedBy = { name: entry.name, email: entry.type === 'member' ? entry.email : null };
     b.avail = 'On Loan';
-    b.reservations = (b.reservations || []).filter(x => (x.email || '').toLowerCase() !== email);
+    b.waitlist.splice(i, 1);
     await writeJson(BOOKS_FILE, books);
-    return { book: b, person };
+    return { book: b, entry };
   });
   if (out.error) return res.status(400).json(out);
-  logAuth('GIVE', req, `id=${id} email=${email}`);
-  res.json({ ok: true, message: `Marked "${out.book.title}" as on loan to ${out.person.name}.` });
+  logAuth('GIVE', req, `id=${id} entry=${entryId}`);
+  res.json({ ok: true, message: `Marked "${out.book.title}" as on loan to ${out.entry.name}.` });
 });
 
 // -- admin: book returned --
+// Whoever is at the front of the single ordered waitlist gets it next,
+// whether they're a website member (emailed automatically) or an offline
+// waiter the admin added by name (the admin hands it over manually and then
+// clicks "Mark given" on that entry) \u2014 so the order a member was told when
+// they joined always matches what actually happens here.
 r.post('/api/admin/books/return', requireAdmin, async (req, res) => {
   const id = parseInt(req.body && req.body.id, 10);
   let notify = null;
+  let nextOffline = null;
   const out = await withLock('books', async () => {
     const books = await readBooks();
     const b = books.find(x => x.id === id);
     if (!b) return { error: 'Book not found' };
     b.borrowedBy = null;
-    if ((b.reservations || []).length) {
-      // hand on to the next member in line and tell them it's ready
+    b.waitlist = b.waitlist || [];
+    if (b.waitlist.length) {
+      const next = b.waitlist[0];
       b.avail = 'Reserved';
-      notify = { person: b.reservations[0], book: b };
+      if (next.type === 'member') notify = { person: next, book: b };
+      else nextOffline = next;
     } else {
       b.avail = 'Available';
     }
@@ -567,13 +615,77 @@ r.post('/api/admin/books/return', requireAdmin, async (req, res) => {
       notified = notify.person.name;
     } catch (e) { console.error('return notify failed:', e.message); }
   }
-  logAuth('RETURN', req, `id=${id} notified=${notified || 'none'}`);
+  logAuth('RETURN', req, `id=${id} notified=${notified || 'none'} nextOffline=${nextOffline ? nextOffline.name : 'none'}`);
   res.json({
     ok: true,
     message: notified
       ? `Returned. Now reserved for ${notified}, who has been emailed.`
-      : `Returned. "${out.book.title}" is available again.`,
+      : nextOffline
+        ? `Returned. Next in line is ${nextOffline.name} (offline) \u2014 once you\u2019ve handed it over, click "Mark given" on their entry.`
+        : `Returned. "${out.book.title}" is available again.`,
   });
+});
+
+// -- admin: add an offline (non-website) person to a book's waiting list --
+r.post('/api/admin/books/waitlist/add', requireAdmin, async (req, res) => {
+  const id = parseInt(req.body && req.body.id, 10);
+  const name = String((req.body && req.body.name) || '').trim().slice(0, 200);
+  if (!name) return res.status(400).json({ error: 'Please enter a name.' });
+  const out = await withLock('books', async () => {
+    const books = await readBooks();
+    const b = books.find(x => x.id === id);
+    if (!b) return { error: 'Book not found' };
+    b.waitlist = b.waitlist || [];
+    b.waitlist.push({ id: crypto.randomUUID(), type: 'offline', name, at: new Date().toISOString() });
+    if (b.avail === 'Available') b.avail = 'Reserved';
+    await writeJson(BOOKS_FILE, books);
+    return { book: b };
+  });
+  if (out.error) return res.status(400).json(out);
+  logAuth('WAITLIST_ADD', req, `id=${id} name=${name}`);
+  res.json({ ok: true, message: `Added ${name} to the waiting list.` });
+});
+
+// -- admin: remove an entry (member or offline) from a book's waiting list --
+r.post('/api/admin/books/waitlist/remove', requireAdmin, async (req, res) => {
+  const id = parseInt(req.body && req.body.id, 10);
+  const entryId = String((req.body && req.body.entryId) || '');
+  const out = await withLock('books', async () => {
+    const books = await readBooks();
+    const b = books.find(x => x.id === id);
+    if (!b) return { error: 'Book not found' };
+    const before = (b.waitlist || []).length;
+    const removed = (b.waitlist || []).find(x => x.id === entryId);
+    b.waitlist = (b.waitlist || []).filter(x => x.id !== entryId);
+    if (b.waitlist.length === before) return { error: 'That entry was not found.' };
+    if (b.avail === 'Reserved' && b.waitlist.length === 0) b.avail = 'Available';
+    await writeJson(BOOKS_FILE, books);
+    return { book: b, removed };
+  });
+  if (out.error) return res.status(400).json(out);
+  logAuth('WAITLIST_REMOVE', req, `id=${id} entry=${entryId}`);
+  res.json({ ok: true, message: `Removed ${out.removed.name} from the waiting list.` });
+});
+
+// -- admin: reorder a waiting list entry one place up or down --
+r.post('/api/admin/books/waitlist/move', requireAdmin, async (req, res) => {
+  const id = parseInt(req.body && req.body.id, 10);
+  const entryId = String((req.body && req.body.entryId) || '');
+  const dir = (req.body && req.body.direction) === 'down' ? 1 : -1;
+  const out = await withLock('books', async () => {
+    const books = await readBooks();
+    const b = books.find(x => x.id === id);
+    if (!b) return { error: 'Book not found' };
+    const list = b.waitlist || [];
+    const i = list.findIndex(x => x.id === entryId);
+    if (i === -1) return { error: 'That entry was not found.' };
+    const j = i + dir;
+    if (j >= 0 && j < list.length) [list[i], list[j]] = [list[j], list[i]];
+    await writeJson(BOOKS_FILE, books);
+    return { book: b };
+  });
+  if (out.error) return res.status(400).json(out);
+  res.json({ ok: true });
 });
 
 // -- admin: full catalogue --
@@ -589,9 +701,9 @@ r.put('/api/books', requireAdmin, async (req, res) => {
     const books = req.body.map((b, i) => {
       const nb = normaliseBook(b, i);
       if (!nb.title.trim()) throw new Error(`Book #${i + 1} is missing a title`);
-      // Deliberately NOT touched here: borrowedBy, reservations, queue.
-      // The admin's manual queue number and members' reservations are independent,
-      // so editing one can never silently delete the other.
+      // Deliberately NOT touched here: borrowedBy, waitlist.
+      // Editing catalogue fields (title, genre, etc.) can never silently drop
+      // who is on loan or waiting.
       return nb;
     });
     await withLock('books', () => writeJson(BOOKS_FILE, books));
@@ -664,10 +776,12 @@ r.post('/api/admin/users/delete', requireAdmin, async (req, res) => {
         if (b.avail === 'On Loan') b.avail = 'Available';
         loansCleared++;
       }
-      const before = (b.reservations || []).length;
-      b.reservations = (b.reservations || []).filter(x => x.email !== removed.email);
-      if (b.reservations.length !== before) queuesCleared++;
-      b.queue = b.reservations.length;
+      const before = (b.waitlist || []).length;
+      b.waitlist = (b.waitlist || []).filter(x => !(x.type === 'member' && x.email === removed.email));
+      if (b.waitlist.length !== before) {
+        queuesCleared++;
+        if (b.avail === 'Reserved' && b.waitlist.length === 0) b.avail = 'Available';
+      }
     }
     await writeJson(BOOKS_FILE, books);
     return { loansCleared, queuesCleared };
