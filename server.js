@@ -894,10 +894,31 @@ r.post('/api/admin/users/decision', requireAdmin, async (req, res) => {
 
 // -- static pages --
 const publicDir = path.join(__dirname, 'public', 'Library');
-r.get('/admin', (req, res) => res.type('html').send(renderPage(path.join(publicDir, 'admin.html'))));
-r.get('/', (req, res) => res.type('html').send(renderPage(path.join(publicDir, 'index.html'))));
-r.get('/index.html', (req, res) => res.type('html').send(renderPage(path.join(publicDir, 'index.html'))));
+// Both pages carry their JavaScript inline, so a browser caching the HTML also caches
+// the script. Without this, phones and other aggressive caches can keep serving an old
+// page long after an update (symptom: catalogue renders empty on one device but not
+// another). `no-cache` still allows a 304 revalidation, so it stays cheap.
+function sendPage(res, file) {
+  res.set('Cache-Control', 'no-cache, must-revalidate');
+  res.type('html').send(renderPage(file));
+}
+r.get('/admin', (req, res) => sendPage(res, path.join(publicDir, 'admin.html')));
+r.get('/', (req, res) => sendPage(res, path.join(publicDir, 'index.html')));
+r.get('/index.html', (req, res) => sendPage(res, path.join(publicDir, 'index.html')));
 r.use('/', express.static(publicDir));
+
+// Canonicalise the missing trailing slash BEFORE the router sees it. Express serves the
+// page at both /Library and /Library/, but the pages call the API with relative URLs
+// ("api/books"), which resolve against the parent directory when the slash is absent —
+// /api/books instead of /Library/api/books — so the catalogue fails with "Could not
+// load". Redirecting keeps every relative URL correct no matter how the link was shared.
+// 302 (not 301) so it is never permanently cached, in case BASE_PATH changes later.
+app.use((req, res, next) => {
+  if (req.method === 'GET' && (req.originalUrl === BASE_PATH || req.originalUrl.startsWith(BASE_PATH + '?'))) {
+    return res.redirect(302, BASE_PATH + '/' + req.originalUrl.slice(BASE_PATH.length));
+  }
+  next();
+});
 
 app.use(BASE_PATH, r);
 app.get('/', (req, res) => res.redirect(BASE_PATH + '/'));
