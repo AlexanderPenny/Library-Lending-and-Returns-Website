@@ -3,6 +3,22 @@
 All notable changes to this project are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.1.1] — 2026-07-31
+
+### Fixed
+- **Catalogue failed to load when the URL had no trailing slash.** Both pages call the
+  API with relative URLs (`api/books`), and the app answered on `/Library` as well as
+  `/Library/`. Without the slash those resolved one level too high — `/api/books` instead
+  of `/Library/api/books` — so the page loaded but showed *"Could not load the catalogue."*
+  Anyone who shared or bookmarked a slash-less link hit this. Requests to `BASE_PATH` are
+  now redirected to `BASE_PATH + '/'` (302, query strings and `?book=` deep links
+  preserved) before routing, so relative URLs always resolve correctly.
+- **Stale pages after an update.** The HTML routes sent no caching headers, and because
+  both pages carry their JavaScript inline, a cached page meant cached script — an update
+  could appear to have no effect on a device that had visited before. They now send
+  `Cache-Control: no-cache, must-revalidate`, so browsers revalidate (still cheap: a 304
+  when nothing changed).
+
 ## [1.1.0] — 2026-07-19
 
 ### Added
